@@ -24,6 +24,15 @@
   <script src="./static/js/index.js"></script>
   <script data-goatcounter="https://paciosoft.goatcounter.com/count"
         async src="//gc.zgo.at/count.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var carousels = bulmaCarousel.attach('#results-carousel', {
+        slidesToScroll: 1,
+        slidesToShow: 1,
+        infinite: true
+      });
+    });
+  </script>
 </head>
 <body>
 
@@ -136,6 +145,9 @@
               <a href="https://www.linkedin.com/in/nicola-messina-a33848164/">Nicola Messina</a><sup>1</sup>,
             </span>
             <span class="author-block">
+              <a href="">Giuseppe Amato</a><sup>1</sup>,
+            </span>
+            <span class="author-block">
               <a href="https://fabriziofalchi.it">Fabrizio Falchi</a><sup>1</sup>
             </span>
           </div>
@@ -152,7 +164,7 @@
             <div class="publication-links">
               <!-- PDF Link. -->
               <span class="link-block">
-                <a href=""
+                <a href="./assets/paper.pdf"
                    class="external-link button is-normal is-rounded is-dark">
                   <span class="icon">
                       <i class="fas fa-file-pdf"></i>
@@ -160,7 +172,7 @@
                   <span>Paper</span>
                 </a>
               </span>
-              <span class="link-block">
+              <!-- <span class="link-block">
                 <a href=""
                    class="external-link button is-normal is-rounded is-dark">
                   <span class="icon">
@@ -168,16 +180,16 @@
                   </span>
                   <span>arXiv</span>
                 </a>
-              </span>
-              <!-- <span class="link-block">
-                <a href=""
+              </span> -->
+              <span class="link-block">
+                <a href="./assets/poster.png"
                    class="external-link button is-normal is-rounded is-dark">
                   <span class="icon">
                       <i class="fas fa-image"></i>
                   </span>
                   <span>Poster</span>
                 </a>
-              </span> -->
+              </span>
               <!-- Code Link. -->
               <span class="link-block">
                 <a href="https://github.com/Ruggero1912/Patch-ioner"
@@ -190,12 +202,21 @@
               </span>
               <!-- Dataset Link. -->
               <span class="link-block">
-                <a href="https://github.com/Ruggero1912/Patch-ioner"
+                <a href="https://github.com/Ruggero1912/Patch-ioner/tree/main/Patch-ioner/eval-trace-captioning"
                    class="external-link button is-normal is-rounded is-dark">
                   <span class="icon">
                       <i class="far fa-images"></i>
                   </span>
-                  <span>Data</span>
+                  <span>Trace Captioning Datasets</span>
+                  </a>
+              </span>
+              <span class="link-block">
+                <a href="https://github.com/Ruggero1912/Patch-ioner"
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="fas fa-balance-scale"></i>
+                  </span>
+                  <span>Models</span>
                   </a>
               </span>
               <!-- Video Link.
@@ -382,31 +403,64 @@ Experiments demonstrate state-of-the-art or competitive performance in zero-shot
   </section>
 
 
+  <section class="hero is-light is-small">
+    <div class="container is-max-desktop">
+      <div class="columns is-centered">
+        <div class="column is-full-width" style="padding-top: 40px;">
+        <h2 class="title is-3">Qualitative Results</h2>
+        <p>We report some predictions of our model and compare baselines from the finer (top) to the coarser (bottom)
+          task. For trace captioning examples, the trace time is color-coded from start (red) to end (yellow). <b>DeCap</b> = DeCap applied on the whole
+          image. <b>DeCap P</b> = DeCap applied on the same aggregation of patches used by our method. <b>DeCap C</b> = DeCap applied on cropped box.
+          <b>ZeroCap</b> = ZeroCap applied to the whole image. <b>CLOSE</b> = CLOSE applied to the whole image. <b>GT</b> = ground-truth caption.</p>
+      </div></div></div>
+      <div class="hero-body">
+      <div class="container">
+        <div id="results-carousel" class="carousel results-carousel">
+          <div class="item item-1">
+            <img src="./static/images/examples-window/examples1.webp" alt="inference examples" class="teaser-image">
+          </div>
+          <div class="item item-2">
+            <img src="./static/images/examples-window/examples2.webp" alt="other inference examples" class="teaser-image">
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
 <!-- Results -->
 <section class="section">
   <div class="container is-max-desktop">
     <div class="columns is-centered">
       <div class="column is-full-width">
-        <h2 class="title is-3">Results</h2>
-        <div class="content is-four-fifths">
+        <h2 class="title is-3">Quantitative Results</h2>
+        <!-- <div class="content is-four-fifths">
           <div class="hero-body">
             <img src="" alt="" class="teaser-image">
           </div>
-        </div>
+        </div> -->
         <div class="content has-text-justified">
-          <p></p>
-            <img src="./static/images/trace-captioning/trace-table.webp" 
+            <!-- <img src="./static/images/trace-captioning/trace-table.webp" 
             alt="Results table for our method on the trace captioning task" 
             class="teaser-image"
             style="margin-bottom: 20px;">
-
+          <p>Trace Captioning results on COCO test set</p> -->
           <div class="columns is-centered">
 
             
             <div class="column">
               <div class="content">
                 <h3 class="title is-4">Radar Charts on the assessed tasks for our Patch-ioner versus the best baseline of each task</h3>
-                Patch-ioner is more effective in region-specific captioning tasks. 
+                <!-- Patch-ioner is more effective in region-specific captioning tasks.  -->
+                 <p>In fine-grained tasks like trace and dense captioning, Patch-ioner excels by providing localized descriptions 
+                  that outperform baselines, which struggle with fine-grained details. 
+                  <!-- Our approach preserves both local elements and broader scene context in a single forward pass, 
+                  while other methods require multiple inferences and overlook context-->
+                  For context-aware tasks like region-set and image captioning, 
+                  our model performs well, with improvements in semantic metrics. 
+                  <!-- The best baseline for region-set captioning generates captions for the entire image, 
+                  aligning with the task's need for context-aware descriptions.  -->
+                  In standard image captioning, our method achieves strong results in semantic quality, 
+                  although it diverges slightly in syntactic metrics, indicating a focus on meaning rather than phrasing.</p>
               </div>
             </div>
 
@@ -449,7 +503,7 @@ Experiments demonstrate state-of-the-art or competitive performance in zero-shot
   </div>
 </section> -->
 
-<!-- <div class="container is-max-desktop content">
+<div class="container is-max-desktop content">
     <h2 class="title">Acknowledgements</h2>
     <p>
       <img src="./static/images/fair.svg" class="ack-img" alt="FAIR Project Logo" width="200">
@@ -460,7 +514,7 @@ Experiments demonstrate state-of-the-art or competitive performance in zero-shot
       This work has received financial support by the European Union — Next Generation EU, Mission 4 Component 1
       CUP B53D23026090001 (a MUltimedia platform for Content Enrichment and Search in audiovisual archives — MUCES PRIN 2022 PNRR P2022BW7CW).
     </p>
-</div> -->
+</div>
 
 
 <footer class="footer">
