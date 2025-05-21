@@ -134,3 +134,5 @@ dependencies:
       - urllib3==2.2.3
       - wcwidth==0.2.13
       - zipp==3.20.2
+      - sentence-transformers==3.2.1
+      - nltk==3.9.1

@@ -1,0 +1,34 @@
+decap_weights: '/raid/datasets/models_weights/decap_weights/clip-b16-ksplits/coco_karpathy-009.pt'
+prefix_size: 512 
+support_memory_size: 0
+dino_model: 'vit_base_patch16_clip_224.openai'
+normalize: False
+resize_dim: 592
+crop_dim: 592
+clip_model_name: 'ViT-B/16'
+use_talk2dino_project: False
+# nested config
+viecap:
+  meacap:
+    memory_caption_num : 5
+    vl_model : "openai/clip-vit-base-patch16"
+    wte_model_path : "sentence-transformers/all-MiniLM-L6-v2"
+    parser_checkpoint : "lizhuang144/flan-t5-base-VG-factual-sg"
+    memory_id : "coco_B16"
+    memory_base_path : "/raid/datasets/meacap_files/"
+  project_length: 10
+  temperature: 0.01
+  top_k: 3
+  threshold: 0.4
+  language_model: 'gpt2'
+  name_of_entities_text: coco_entities #vinvl_vgoi_entities
+  files_path: '/raid/datasets/viecap_files/'
+  prompt_ensemble: True
+  weight_path: '/raid/datasets/viecap_files/checkpoints/train_cocoB16/coco_prefix-0014.pt'
+  using_hard_prompt: True
+  soft_prompt_first: True
+  only_hard_prompt: False
+  using_greedy_search: True #if false, use beam search
+  beam_width: 5
+  text_prompt: None
+

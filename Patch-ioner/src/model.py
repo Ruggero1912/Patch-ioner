@@ -27,6 +27,25 @@ from open_clip_proxy import create_model, tokenizer
 
 DECODER_CONFIG_PATH = os.path.join("./decoder_config.pkl")
 
+
+# Container to store outputs
+patch_embeddings = {}
+
+# Hook function
+def save_patch_embeddings(module, input, output):
+    """
+    module: the module being hooked (the transformer)
+    input: input to the module
+    output: output from the module
+    """
+    # output shape: (batch_size, 1 + num_patches, embedding_dim)
+    patch_tokens = output[:, 1:, :]  # remove the CLS token
+    patch_embeddings['tokens'] = patch_tokens
+    patch_embeddings['cls'] = output[:, 0, :]
+    patch_embeddings['full'] = output
+
+
+
 class MLP(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -295,8 +314,21 @@ class Patchioner(nn.Module):
     def __init__(self, projection_type, decoder_weights, device, prefix_size, linear_talk2dino, support_memory_size,
                  dino_model=None, proxyclip_clipmodel=None, proxyclip_vfm=None, use_talk2dino_project=True, normalize=True, attention_type='qkv', talk2dino_config=None, 
                  talk2dino_weights=None, resize_dim=518, crop_dim=518, talk2dino_attn_type='qkv', calculate_argmax_text=False,
-                 online_texts=None, clip_model_name=None):
+                 online_texts=None, clip_model_name=None, use_open_clip=False, viecap_config=None):
         super().__init__()
+
+
+        self.decoding_method = None
+
+        if viecap_config is not None:
+            if viecap_config.get('meacap', False):
+                from src.meacap.entrypoint import MeaCap
+                self.viecap = MeaCap(viecap_config, device, clip_model_name)
+            else:
+                from src.viecap.entrypoint import VieCap
+                self.viecap = VieCap(viecap_config, device, clip_model_name)
+        else:
+            self.viecap = None
 
         # decoder initialization
         if online_texts is not None:
@@ -330,7 +362,8 @@ class Patchioner(nn.Module):
                 normalize_memory_embs=(dino_model is not None) and ('dinov2' not in dino_model),
                 talk2dino_attn_type=talk2dino_attn_type,
                 online_texts=online_texts,
-                clip_modelname=clip_model_name
+                clip_modelname=clip_model_name,
+                use_open_clip=use_open_clip
                 )
         else:
             self.im_proj = None
@@ -358,13 +391,16 @@ class Patchioner(nn.Module):
                 patch_size = 32
             elif dino_model is None:
                 pass 
+            elif use_open_clip:
+                patch_size = int(dino_model.split('/')[-1])
+                assert patch_size > 0, "Patch size must be a positive integer, got {}".format(patch_size)
             else:
                 raise Exception("Unknown patch size")
 
             self.num_patch_tokens = crop_dim // patch_size * crop_dim // patch_size
             self.num_tokens = self.num_global_tokens + self.num_patch_tokens
             
-            if 'vitl' in dino_model or 'vit_large' in dino_model or 'ViT-L' in dino_model:
+            if 'vitl' in dino_model or 'vit_large' in dino_model or 'ViT-L' in dino_model or 'ViT-H' in dino_model:
                 self.embed_dim = 1024
             elif 'vitb' in dino_model or 'vit_base' in dino_model or 'ViT-B' in dino_model:
                 self.embed_dim = 768
@@ -418,6 +454,41 @@ class Patchioner(nn.Module):
                     T.Normalize(mean=(0.48145466, 0.4578275, 0.40821073),
                                 std=(0.26862954, 0.26130258, 0.27577711)),
                 ])
+            elif use_open_clip:
+
+                print(f"""
+                -------------------------------------------
+                Using OpenCLIP model {dino_model} 
+                -------------------------------------------
+    """)
+                # load open clip weights
+                from open_clip import create_model_and_transforms, get_tokenizer
+                open_clip, preprocess_train, preprocess_val = create_model_and_transforms(
+                    model_name=dino_model,
+                    pretrained="laion2b_s32b_b79k",
+                    device=device,
+                    #image_size=224,
+                    #context_length=77,
+                    #vocab_size=49408,
+                )
+                tokenizer = get_tokenizer(dino_model.replace("/", "-"))
+
+
+                open_clip.eval()
+
+                image_transforms_open_clip = preprocess_train
+
+                self.dino = open_clip
+                self.image_transforms = image_transforms_open_clip
+                self.image_transforms_no_crop = T.Compose([
+                    T.Resize((resize_dim, resize_dim), interpolation=T.InterpolationMode.BICUBIC),
+                    T.ToTensor(),
+                    T.Normalize(mean=(0.48145466, 0.4578275, 0.40821073),
+                                std=(0.26862954, 0.26130258, 0.27577711)),
+                ])
+
+                self.decoding_method = tokenizer.decode
+            
             else:
                 raise Exception("Model family unsupported")
         else:
@@ -450,7 +521,8 @@ class Patchioner(nn.Module):
         
         if dino_model is not None:
             self.dino.eval()
-            self.dino.blocks[-1].attn.qkv.register_forward_hook(get_self_attention)
+            if hasattr(self.dino, 'blocks'):
+                self.dino.blocks[-1].attn.qkv.register_forward_hook(get_self_attention)
 
             # need patch_size
             if 'dino' in dino_model:
@@ -503,7 +575,9 @@ class Patchioner(nn.Module):
             talk2dino_attn_type=config.get('talk2dino_attn_type', 'qkv'),
             calculate_argmax_text=config.get('calculate_argmax_text', False),
             clip_model_name=config.get('clip_model_name', None),
-            online_texts=online_texts
+            online_texts=online_texts,
+            use_open_clip=config.get('use_open_clip', False),
+            viecap_config=config.get('viecap', None)
         )
         model.to(device)
         return model
@@ -555,6 +629,10 @@ class Patchioner(nn.Module):
             self.dino.blocks[-1].attn.qkv.register_forward_hook(get_self_attention)
             self.dino.blocks[-1].register_forward_hook(get_layer_n_output)
 
+        if hasattr(self.dino, 'visual') and hasattr(self.dino.visual, 'transformer'):
+            # Attach hook to the visual transformer
+            hook_handle = self.dino.visual.transformer.register_forward_hook(save_patch_embeddings)
+
         if caption_bboxes_type is not None:
             return self.caption_bboxes(imgs, bboxes, caption_bboxes_type, compute_scores=compute_scores)
 
@@ -563,17 +641,26 @@ class Patchioner(nn.Module):
         elif self.model_name == 'proxyclip':
             dino_outs = self.proxyclip(imgs)
         else:
-            # using timm interface
-            output = self.dino.forward_features(imgs)
-            # projecting 768 -> 512
-            output = self.dino.head(output)
+            if hasattr(self.dino, 'blocks'):
+                # using timm interface
+                output = self.dino.forward_features(imgs)
+                # projecting 768 -> 512
+                output = self.dino.head(output)
+            else:
+                # using open_clip interface
+                output = self.dino.visual(imgs)
+                output = patch_embeddings['full']
+
+                output = output @ self.dino.visual.proj  # shape (B, N_patches, output_dim)
+                
+
             # reporting output in DINOv2 format
             dino_outs = {
                 'x_norm_clstoken': output[:, 0, :],
                 'x_norm_patchtokens': output[:, 1:, :],
             }
         
-        if self.model_name != 'proxyclip':
+        if self.model_name != 'proxyclip' and 'self_attn' in feats:
             self_attn, self_attn_maps = process_self_attention(feats['self_attn'], imgs.shape[0], self.num_tokens, self.num_attn_heads, self.embed_dim, self.scale, self.num_global_tokens, ret_self_attn_maps=True)
             avg_self_attn_token = (self_attn.unsqueeze(-1) * dino_outs['x_norm_patchtokens']).mean(dim=1)
 
@@ -618,11 +705,6 @@ class Patchioner(nn.Module):
                         (dino_outs['x_norm_patchtokens'], cleaned_patchtokens), dim=0
                     )
 
-            # dino_outs['x_norm_patchtokens'] = self.ctx_cleaner(self.im_proj.project(dino_outs['x_norm_patchtokens'], normalize=True),
-            #                                                   self.im_proj.project(dino_outs['x_norm_clstoken'], normalize=True),
-            #                                                   cleaning_type=cleaning_type,
-            #                                                   alpha=alpha)
-
 
         embed_dim = dino_outs['x_norm_patchtokens'].shape[-1]
         if get_cls_capt:
@@ -646,7 +728,9 @@ class Patchioner(nn.Module):
             
         
         if get_attn_heads_capt:
+            
             ret = self.caption_tokens(disentangled_self_attn.view(-1, embed_dim), compute_scores=compute_scores)
+            
             if compute_scores is True:
                 attn_heads_capt_unrolled, attn_heads_scores_unrolled = ret
                 outs['attn_heads_capts'] = [attn_heads_capt_unrolled[i * self.num_attn_heads:(i + 1) * self.num_attn_heads] for i in range(bs)]
@@ -656,7 +740,9 @@ class Patchioner(nn.Module):
                 outs['attn_heads_capts'] = [attn_heads_capt_unrolled[i * self.num_attn_heads:(i + 1) * self.num_attn_heads] for i in range(bs)]
         if get_patch_capts:
             n_patches = dino_outs['x_norm_patchtokens'].shape[1]
+            
             ret = self.caption_tokens(dino_outs['x_norm_patchtokens'].reshape(-1, embed_dim), project=cleaning_type is None, compute_scores=compute_scores)
+            
             if compute_scores is True:
                 patch_tokens_capts_unrolled, patch_tokens_scores_unrolled = ret
                 outs['patch_tokens_capts'] = [patch_tokens_capts_unrolled[i * n_patches:(i + 1) * n_patches] for i in range(bs)]
@@ -665,7 +751,9 @@ class Patchioner(nn.Module):
                 patch_tokens_capts_unrolled = ret
                 outs['patch_tokens_capts'] = [patch_tokens_capts_unrolled[i * n_patches:(i + 1) * n_patches] for i in range(bs)]
         if get_register_capts:
+            
             ret = self.caption_tokens(dino_outs['x_norm_regtokens'].view(-1, embed_dim), compute_scores=compute_scores)
+            
             if compute_scores is True:
                 register_capt_unrolled, register_scores_unrolled = ret
                 outs['register_capts'] = [register_capt_unrolled[i * 4:(i + 1) * 4] for i in range(bs)]
@@ -692,14 +780,7 @@ class Patchioner(nn.Module):
                                                   gaussian_bbox_variance=gaussian_bbox_variance,
                                                   patch_size=self.patch_size, attention_map=bbox_attn_maps)#.view(-1, self.embed_dim)
 
-            # img_index = i if i < len(dino_outs['x_norm_clstoken']) else i - 1
-            # if cleaning_type:
-            #    #prev_shape = bbox_feats.shape
-            #    for i in range(bbox_feats.shape[0]):
-            #        bbox_feats[i] = self.ctx_cleaner(self.im_proj.project(bbox_feats[i], normalize=True),
-            #                                                    self.im_proj.project(dino_outs['x_norm_clstoken'][i].unsqueeze(0), normalize=True),
-            #                                                    cleaning_type=cleaning_type,
-            #                                                    alpha=alpha)#.reshape(prev_shape)
+
             bbox_feats = bbox_feats.view(-1, embed_dim)
             n_batch = math.ceil(bbox_feats.shape[0] / bbox_bs)
             outs['bbox_capts'] = []
@@ -713,7 +794,9 @@ class Patchioner(nn.Module):
                 end = start + bbox_bs if i < n_batch - 1 else bbox_feats.shape[0]
                 #cur_bbox_feats = bbox_feats[start:end]
                 if return_n_best_sims is None:
+                    
                     ret = self.caption_tokens(bbox_feats[start:end], project=(cleaning_type is None), compute_scores=compute_scores)
+                    
                     if compute_scores is True:
                         bbox_capts, bbox_scores = ret
                         outs['bbox_capts'].extend(bbox_capts)
@@ -722,7 +805,9 @@ class Patchioner(nn.Module):
                         bbox_capts = ret
                         outs['bbox_capts'].extend(bbox_capts)
                 else:
+                    
                     ret = self.caption_tokens(bbox_feats[start:end], project=(cleaning_type is None), return_n_best_sims=return_n_best_sims, compute_scores=compute_scores)
+                    
                     if compute_scores is True:
                         (bbox_capts, bbox_sims), bbox_scores = ret
                         outs['bbox_capts'].extend(bbox_capts)
@@ -742,6 +827,7 @@ class Patchioner(nn.Module):
             bbox_attn_maps = self_attn.cpu() if use_attn_map_for_bboxes else None
             n_boxes = bboxes.shape[1]
             bbox_feats = extract_bboxes_feats(dino_outs['x_norm_patchtokens'], bboxes, gaussian_avg=gaussian_avg, gaussian_bbox_variance=gaussian_bbox_variance, get_single_embedding_per_image=True, patch_size=self.patch_size, attention_map=bbox_attn_maps)
+            
             outs['set_controllable_capts'] = self.caption_tokens(bbox_feats)
         
         if traces is not None:
@@ -750,7 +836,9 @@ class Patchioner(nn.Module):
             if use_attention_tracing:
                 relevant_patches = (self_attn.view(relevant_patches.shape) * relevant_patches)
             trace_embeds = (relevant_patches.unsqueeze(-1) * dino_outs['x_norm_patchtokens'].view(bs, n_patches, n_patches, embed_dim)).mean(dim=(1,2))
+            
             outs['trace_capts'] = self.caption_tokens(trace_embeds)
+
         return outs
 
     def caption_bboxes(self, imgs, bboxes, capt_type='cls_capt', crop_boxes=False, compute_scores=False):
@@ -790,6 +878,13 @@ class Patchioner(nn.Module):
         return ret
 
     def caption_tokens(self, dino_tokens, project=True, return_n_best_sims=None, compute_scores : bool = False):
+        
+        if self.viecap is not None:
+            if return_n_best_sims:
+                raise Exception("return_n_best_sims is not supported with viecap")
+            outs = self.viecap.forward(dino_tokens, compute_scores=compute_scores)
+            return outs
+        
         if self.im_proj is None:
             project = False
         if self.calculate_argmax_text:
@@ -802,11 +897,11 @@ class Patchioner(nn.Module):
                 projected_outs = self.im_proj.project(dino_tokens, normalize=self.normalize)
             else:
                 projected_outs = dino_tokens
-            outs = decoding_batched(self.decoder, projected_outs, compute_scores=compute_scores)
+            outs = decoding_batched(self.decoder, projected_outs, compute_scores=compute_scores, decoding_method=self.decoding_method)
         else:
             # DINOv2 embedding inversion
             clip_tokens = revert_transformation(self.im_proj.project(dino_tokens, normalize=self.normalize), A_pinv=self.talk2dino_A_pinv, b=self.talk2dino_b)
-            outs = decoding_batched(self.decoder, clip_tokens, compute_scores=compute_scores)
+            outs = decoding_batched(self.decoder, clip_tokens, compute_scores=compute_scores, decoding_method=self.decoding_method)
         return outs
 
     def ctx_cleaner(self, dirty_embeds : torch.Tensor, ctx_embed : torch.Tensor, cleaning_type='orthogonal_projection', alpha=1.0, epsilon=1e-6):
