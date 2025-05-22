@@ -297,6 +297,26 @@ kkv_attention: False
 projection_type: '/raid/datasets/im2txtmemories/coco_train_karpathy.json'
 ```
 
+To setup a ViECap baseline, populate the nested fields at the key `viecap`. The available options are:
+
+- `project_length`: Length of the learnable prefix projected from vision features.
+- `top_k`: The number of detected objects to use as hard prompt.
+- `name_of_entities_text`: The name of the collection of entities to use for the hard-prompt.
+- `files_path`: Path to directory containing ViECap-related checkpoints and auxiliary data.
+- `weight_path`: Path to the learned weights used for prefix projection.
+- `using_hard_prompt`: True in the default configuration. 
+- `soft_prompt_first`: True in the default configuration.
+- `using_greedy_search`: True for greedy search, False for beam search.
+- `language_model`: GPT-2 in the default configuration.
+
+In the case of MeaCap baselines, set the nested fields at `viecap` -> `meacap`. The available options are:
+
+- `memory_caption_num`: standard value for MeaCap is 5
+- `vl_model`: the clip version 
+- `wte_model_path`: the default value is "sentence-transformers/all-MiniLM-L6-v2"
+- `parser_checkpoint`: Checkpoint for a scene graph parser, default is "lizhuang144/flan-t5-base-VG-factual-sg".
+- `memory_id`: the id of the memory pool.
+- `memory_base_path`: Path to directory containing MeaCap-related checkpoints and auxiliary data.
 
 
 
@@ -304,6 +324,8 @@ projection_type: '/raid/datasets/im2txtmemories/coco_train_karpathy.json'
 
 This repository contains code from several other repositories, including:
 - [DeCap](https://github.com/dhg-wei/DeCap)
+- [MeaCap](https://github.com/joeyz0z/MeaCap)
+- [ViECap](https://github.com/FeiElysia/ViECap)
 - [Talk2DINO](https://github.com/lorebianchi98/Talk2DINO)
 - [PAC-S](https://github.com/aimagelab/pacscore)
 - [ProxyCLIP](https://github.com/mc-lan/ProxyCLIP)
