@@ -1,0 +1,7 @@
+include README.md
+include requirements.txt
+include LICENSE
+recursive-include alpha_clip *.py
+recursive-include alpha_clip *.gz
+include example.py
+include test_installation.py

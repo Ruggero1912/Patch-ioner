@@ -1,0 +1,10 @@
+decap_weights: '/raid/datasets/models_weights/decap_weights/clip-b16-ksplits/coco_karpathy-009.pt'
+prefix_size: 512 
+support_memory_size: 500000
+dino_model: 'vit_base_patch16_clip_224.openai'
+normalize: False
+resize_dim: 592
+crop_dim: 592
+clip_model_name: 'ViT-B/16'
+use_talk2dino_project: False
+projection_type: '/raid/datasets/im2txtmemories/coco_train_karpathy.json'

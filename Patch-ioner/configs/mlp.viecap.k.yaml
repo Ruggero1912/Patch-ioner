@@ -1,0 +1,31 @@
+decap_weights: '/raid/datasets/models_weights/decap_weights/talkingdino/talkingDINO.pt'
+prefix_size: 768 
+linear_talk2dino: False 
+support_memory_size: 0
+dino_model: 'dinov2_vitb14_reg'
+normalize: False
+kkv_attention: False
+use_talk2dino_project: False
+clip_model_name: "ViT-B/16"
+
+
+# nested config
+viecap:
+  clip_hidden_size: 768
+  suffix: ViT-B16_t2d_
+  project_length: 10
+  temperature: 0.01
+  top_k: 3
+  threshold: 0.4
+  language_model: 'gpt2'
+  name_of_entities_text: coco_entities #vinvl_vgoi_entities
+  files_path: '/raid/datasets/viecap_files/'
+  prompt_ensemble: True
+  weight_path: '/raid/datasets/viecap_files/checkpoints/train_coco_t2d_B16/coco_prefix-0014.pt'
+  using_hard_prompt: True
+  soft_prompt_first: True
+  only_hard_prompt: False
+  using_greedy_search: True #if false, use beam search
+  beam_width: 5
+  text_prompt: None
+

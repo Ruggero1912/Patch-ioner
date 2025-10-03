@@ -1,0 +1,5 @@
+*.pyc
+__pycache__/
+coco-dataset/
+*.h5
+.env

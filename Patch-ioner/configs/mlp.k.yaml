@@ -1,0 +1,8 @@
+decap_weights: '/raid/datasets/models_weights/decap_weights/talkingdino-ksplits/coco_karpathy-009.pt'
+prefix_size: 768 
+linear_talk2dino: False 
+support_memory_size: 591753
+dino_model: 'dinov2_vitb14_reg'
+normalize: True
+kkv_attention: False
+projection_type: '/raid/datasets/im2txtmemories/coco_train_karpathy.json'

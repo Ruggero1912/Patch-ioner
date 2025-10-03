@@ -1,0 +1,41 @@
+# DenseCLIP ViT-B/16 Configuration
+# Configuration for loading DenseCLIP checkpoint as a CLIP-like model
+
+model:
+  name: "denseclip_vitb16"
+  type: "vit"  # vision transformer
+  
+  # Vision encoder configuration
+  vision:
+    image_resolution: 640
+    vision_layers: 12
+    vision_width: 768
+    vision_patch_size: 16
+    embed_dim: 512
+  
+  # Text encoder configuration  
+  text:
+    context_length: 13  # DenseCLIP uses shorter context
+    vocab_size: 49408
+    transformer_width: 512
+    transformer_heads: 8
+    transformer_layers: 12
+    embed_dim: 512
+
+# Checkpoint information
+checkpoint:
+  path: "/raid/datasets/models_weights/denseclip/segmentation/semanticFPN/ViT-B-DenseCLIP.pth"
+  format: "denseclip"  # vs "openai_clip"
+  
+# Processing configuration
+preprocessing:
+  image_mean: [0.48145466, 0.4578275, 0.40821073]
+  image_std: [0.26862954, 0.26130258, 0.27577711]
+  normalize: true
+  
+# Optional overrides
+overrides:
+  # Set to true to use OpenAI CLIP tokenizer instead of DenseCLIP's
+  use_openai_tokenizer: false
+  # Set custom context length (will resize positional embeddings if needed)
+  custom_context_length: null

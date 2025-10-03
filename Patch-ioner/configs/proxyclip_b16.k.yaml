@@ -1,0 +1,11 @@
+decap_weights: '/raid/datasets/models_weights/decap_weights/clip-b16/coco_prefix-009.pt'
+prefix_size: 512 
+support_memory_size: 500000
+proxyclip_clipmodel: 'ViT-B/16'
+proxyclip_vfm: 'dino'
+normalize: False
+resize_dim: 296
+crop_dim: 296
+use_talk2dino_project: False
+clip_model_name: 'ViT-B/16'
+projection_type: '/raid/datasets/im2txtmemories/coco_train_karpathy.json'

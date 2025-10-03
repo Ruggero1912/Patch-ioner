@@ -1,0 +1,17 @@
+decap_weights: '/raid/datasets/models_weights/decap_weights/clip-b16-ksplits/coco_karpathy-009.pt'
+prefix_size: 512 
+support_memory_size: 500000
+dino_model: 'AlphaClip'
+normalize: False
+resize_dim: 224
+crop_dim: 224
+clip_model_name: 'ViT-B/16'
+use_talk2dino_project: False
+projection_type: '/raid/datasets/im2txtmemories/coco_train_karpathy.json'
+alphaclip_config:
+  patch_size: 16
+  name: ViT-B/16
+  alpha_vision_checkpoint: "/raid/datasets/models_weights/alphaclip/checkpoints/clip_b16_grit1m_fultune_8xe.pth"
+  use_cls_for_localized_captions: True
+  embed_dim: 512
+

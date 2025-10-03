@@ -1,0 +1,306 @@
+{
+  "global_defaults": {
+    "batch_size": 16,
+    "gaussian_variance": 1.0,
+    "conda_env": "decapdino"
+  },
+  "output_directory": "./results",
+  "experiments": [
+    {
+      "model_name": "regionclip_resnet50x4_p32.k",
+      "conda_env": "decapdinoregionclip",
+      "tasks": {
+        "narratives": {
+          "caption_from": "cls"
+        },
+        "image_captioning": [
+          {
+            "caption_from": "cls"
+          }
+        ],
+        "dense_captioning": [
+          {
+            "caption_bboxes_type": "cls_capt"
+          }
+        ],
+        "controllable_captioning": [
+          {
+            "caption_from": "cls"
+          }
+        ]
+      }
+    },
+    {
+      "model_name": "regionclip_resnet50_p32.k",
+      "conda_env": "decapdinoregionclip",
+      "tasks": {
+        "narratives": {
+          "caption_from": "cls"
+        },
+        "image_captioning": [
+          {
+            "caption_from": "cls"
+          }
+        ],
+        "dense_captioning": [
+          {
+            "caption_bboxes_type": "cls_capt"
+          }
+        ],
+        "controllable_captioning": [
+          {
+            "caption_from": "cls"
+          }
+        ]
+      }
+    },
+    {
+      "model_name": "mlp.karpathy",
+      "tasks": {
+        "narratives": {
+          "caption_from": "patches"
+        },
+        "image_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": "",
+            "gaussian_variance": 100
+          },
+          {
+            "caption_from": "avg_self_attn"
+          }
+        ],
+        "dense_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ],
+        "controllable_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ]
+      }
+    },
+    {
+      "model_name": "alphaclip_B16_CLS.k",
+      "conda_env": "decapdinoalphaclip",
+      "tasks": {
+        "narratives": {
+          "caption_from": "patches"
+        },
+        "image_captioning": [
+          {
+            "caption_from": "cls"
+          }
+        ],
+        "dense_captioning": [
+          {
+            "caption_from": "patches"
+          }
+        ],
+        "controllable_captioning": [
+          {
+            "caption_from": "patches"
+          }
+        ]
+      }
+    },
+    {
+      "model_name": "mlp.viecap.k",
+      "tasks": {
+        "narratives": {
+          "caption_from": "patches"
+        },
+        "image_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": "",
+            "gaussian_variance": 100
+          },
+          {
+            "caption_from": "avg_self_attn"
+          }
+        ],
+        "dense_captioning": [
+          {
+            "caption_from": "patches"
+          }
+        ],
+        "controllable_captioning": [
+          {
+            "caption_from": "patches"
+          }
+        ]
+      }
+    },
+    {
+      "model_name": "mlp.meacap.k",
+      "tasks": {
+        "narratives": {
+          "caption_from": "patches"
+        },
+        "image_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": "",
+            "gaussian_variance": 100
+          },
+          {
+            "caption_from": "avg_self_attn"
+          }
+        ],
+        "dense_captioning": [
+          {
+            "caption_from": "patches"
+          }
+        ],
+        "controllable_captioning": [
+          {
+            "caption_from": "patches"
+          }
+        ]
+      }
+    },
+    {
+      "model_name": "original_decap_big_resize_B16.k",
+      "tasks": {
+        "narratives": [
+          {
+            "caption_from": "cls"
+          }
+        ]
+      }
+    },
+    {
+      "model_name": "original_decap_B16.k",
+      "tasks": {
+        "dense_captioning": [
+          {
+            "caption_from": "cls"
+          },
+          {
+            "caption_bboxes_type": "cls_capt"
+          }
+        ],
+        "controllable_captioning": {
+          "caption_from": "cls"
+        }
+      }
+    },
+    {
+      "model_name": "original_decap.k",
+      "tasks": {
+        "image_captioning": {
+          "caption_from": "cls"
+        }
+      }
+    },
+    {
+      "model_name": "viecap_b16_37patches.k",
+      "tasks": {
+        "narratives": [
+          {
+            "caption_from": "cls"
+          }
+        ],
+        "dense_captioning": [
+          {
+            "caption_from": "cls"
+          }
+        ]
+      }
+    },
+    {
+      "model_name": "viecap.k",
+      "tasks": {
+        "dense_captioning": {
+          "caption_bboxes_type": "cls_capt"
+        },
+        "controllable_captioning": {
+          "caption_from": "cls"
+        },
+        "image_captioning": {
+          "caption_from": "cls"
+        }
+      }
+    },
+    {
+      "model_name": "meacap_invlm_b16_37patches.k",
+      "tasks": {
+        "narratives": [
+          {
+            "caption_from": "cls"
+          }
+        ],
+        "dense_captioning": [
+          {
+            "caption_from": "cls"
+          }
+        ]
+      }
+    },
+    {
+      "model_name": "meacap_invlm.k",
+      "tasks": {
+        "dense_captioning": {
+          "caption_bboxes_type": "cls_capt"
+        },
+        "controllable_captioning": {
+          "caption_from": "cls"
+        },
+        "image_captioning": {
+          "caption_from": "cls"
+        }
+      }
+    },
+    {
+      "model_name": "mlp_noise.k",
+      "tasks": {
+        "narratives": {
+          "caption_from": "patches"
+        },
+        "image_captioning": [
+          {
+            "caption_from": "avg_self_attn"
+          },
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": "",
+            "gaussian_variance": 100
+          }
+        ],
+        "dense_captioning": [
+          {
+            "caption_from": "patches"
+          }
+        ],
+        "controllable_captioning": [
+          {
+            "caption_from": "patches"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+decap_weights: '/raid/datasets/models_weights/decap_weights/denseclip/vitb_16_009_segmentation_long_ctx.pt'
+prefix_size: 512 
+support_memory_size: 500000
+dino_model: 'INViTE_B16'
+normalize: False
+resize_dim: 640
+crop_dim: 640
+clip_model_name: 'ViT-B/16'
+use_talk2dino_project: False
+projection_type: '/raid/datasets/im2txtmemories/coco_train_karpathy.json'
+linear_talk2dino: False  # Ensure this is explicitly set
+denseclip_config: denseclip_segmentation_vitb16_long_ctx

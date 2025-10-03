@@ -1,0 +1,424 @@
+{
+  "global_defaults": {
+    "batch_size": 16,
+    "gaussian_variance": 1.0,
+    "conda_env": "decapdino"
+  },
+  "output_directory": "./results",
+  "experiments": [
+    {
+      "model_name": "INViTE_B16_1layer.k",
+      "tasks": {
+        "narratives": {
+          "caption_from": "patches"
+        },
+        "image_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": "",
+            "gaussian_variance": 100
+          }
+        ],
+        "dense_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ],
+        "controllable_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ]
+      }
+    },
+    {
+      "model_name": "INViTE_B16_1layer_bigResize.k",
+      "tasks": {
+        "narratives": {
+          "caption_from": "patches"
+        },
+        "image_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": "",
+            "gaussian_variance": 100
+          }
+        ],
+        "dense_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ],
+        "controllable_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ]
+      }
+    },
+    {
+      "model_name": "regionclip_resnet50x4_p32.k",
+      "conda_env": "decapdinoregionclip",
+      "tasks": {
+        "narratives": {
+          "caption_from": "patches"
+        },
+        "image_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": "",
+            "gaussian_variance": 100
+          }
+        ],
+        "dense_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ],
+        "controllable_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ]
+      }
+    },
+    {
+      "model_name": "regionclip_resnet50_p32.k",
+      "conda_env": "decapdinoregionclip",
+      "tasks": {
+        "narratives": {
+          "caption_from": "patches"
+        },
+        "image_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": "",
+            "gaussian_variance": 100
+          }
+        ],
+        "dense_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ],
+        "controllable_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ]
+      }
+    },
+    {
+      "model_name": "original_decap_big_resize_B16.k",
+      "tasks": {
+        "narratives": {
+          "caption_from": "patches"
+        },
+        "image_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": "",
+            "gaussian_variance": 100
+          }
+        ],
+        "dense_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ],
+        "controllable_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ]
+      }
+    },
+    {
+      "model_name": "dinotxt",
+      "conda_env": "decapdinotxt",
+      "tasks": {
+        "narratives": {
+          "caption_from": "patches"
+        },
+        "image_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": "",
+            "gaussian_variance": 100
+          }
+        ],
+        "dense_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ],
+        "controllable_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ]
+      }
+    },
+    {
+      "model_name": "mlp.karpathy",
+      "tasks": {
+        "narratives": {
+          "caption_from": "patches"
+        },
+        "image_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": "",
+            "gaussian_variance": 100
+          }
+        ],
+        "dense_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ],
+        "controllable_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ]
+      }
+    },
+    {
+      "model_name": "proxyclip_b16_dinov2.k",
+      "conda_env": "decapdino",
+      "tasks": {
+        "narratives": {
+          "caption_from": "patches"
+        },
+        "image_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": "",
+            "gaussian_variance": 100
+          }
+        ],
+        "dense_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ],
+        "controllable_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ]
+      }
+    },
+    {
+      "model_name": "proxyclip_b16.k",
+      "conda_env": "decapdino",
+      "tasks": {
+        "narratives": {
+          "caption_from": "patches"
+        },
+        "image_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": "",
+            "gaussian_variance": 100
+          }
+        ],
+        "dense_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ],
+        "controllable_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ]
+      }
+    },
+    {
+      "model_name": "denseclip_B16_seg_40patches.k",
+      "conda_env": "decapdino",
+      "tasks": {
+        "narratives": {
+          "caption_from": "patches"
+        },
+        "image_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": "",
+            "gaussian_variance": 100
+          }
+        ],
+        "dense_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ],
+        "controllable_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ]
+      }
+    },
+    {
+      "model_name": "alphaclip_B16.k",
+      "conda_env": "decapdinoalphaclip",
+      "tasks": {
+        "narratives": {
+          "caption_from": "patches"
+        },
+        "image_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": "",
+            "gaussian_variance": 100
+          }
+        ],
+        "dense_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ],
+        "controllable_captioning": [
+          {
+            "caption_from": "patches",
+            "use_gaussian_weighting": ""
+          },
+          {
+            "caption_from": "patches"
+          }
+        ]
+      }
+    }
+  ]
+}

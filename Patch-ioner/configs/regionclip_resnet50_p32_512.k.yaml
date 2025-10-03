@@ -1,0 +1,18 @@
+decap_weights: '/raid/datasets/models_weights/decap_weights/regionclip-resnet50/coco_karpathy-009.pt'
+prefix_size: 1024
+support_memory_size: 500000
+normalize: False
+resize_dim: 512
+crop_dim: 512
+use_talk2dino_project: False
+dino_model: 'regionclip_resnet50_p32.k'
+regionclip_config:
+  checkpoint: '/raid/datasets/models_weights/regionclip/regionclip_pretrained-cc_rn50.pth'
+  config_name: 'pretrain/RegionCLIP_RN50.yaml'
+  use_attnpool_for_spatial_feats: True  # Use attention pooling for spatial features
+  patch_size: 32 # ResNet reduces spatial resolution by factor of 16 (2^5: stem avgpool + 3 layers with stride 2) so for 224 input size, output is 14x14
+  embed_dim: 1024 # Common for ResNet-50 CLIP models
+  MODEL:
+    RESNETS:
+      OUT_FEATURES: ['res4', 'res5'] # if you add 'res5', the patch_size must be updated to 32
+      IMAGE_RESOLUTION: 512 # Set the image resolution to match the resize_dim and crop_dim

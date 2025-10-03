@@ -1,0 +1,7 @@
+decap_weights: '/raid/datasets/models_weights/decap_weights/talkingdino-noisy-ksplits/coco_karpathy-009.pt'
+prefix_size: 768 
+linear_talk2dino: False 
+support_memory_size: 0
+dino_model: 'dinov2_vitb14_reg'
+normalize: True
+kkv_attention: False

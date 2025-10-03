@@ -1,0 +1,17 @@
+decap_weights: '/raid/datasets/models_weights/decap_weights/clip-b16-ksplits/coco_karpathy-009.pt'
+prefix_size: 512 
+support_memory_size: 500000
+dino_model: 'INViTE_B16'
+normalize: False
+resize_dim: 224
+crop_dim: 224
+clip_model_name: 'ViT-B/16'
+use_talk2dino_project: False
+projection_type: '/raid/datasets/im2txtmemories/coco_train_karpathy.json'
+linear_talk2dino: False  # Ensure this is explicitly set
+
+invite_config:
+  name: 'ViT-B/16'  # Available models: ViT-B/32, ViT-B/16, ViT-L/14, RN50, RN101, etc.
+  jit: false        # Whether to use JIT compilation
+  extract_last_k_th_token: 1  # Token extraction parameter
+  viz: false        # Visualization flag

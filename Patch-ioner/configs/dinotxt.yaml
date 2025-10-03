@@ -1,0 +1,8 @@
+decap_weights: '/raid/datasets/models_weights/decap_weights/talkingdinotxt/coco_prefix-009.pt'
+prefix_size: 1024 
+linear_talk2dino: False 
+support_memory_size: 591753
+dino_model: 'dinov2_vitl14_reg4_dinotxt_tet1280d20h24l'
+normalize: True
+kkv_attention: False
+use_talk2dino_project: False
