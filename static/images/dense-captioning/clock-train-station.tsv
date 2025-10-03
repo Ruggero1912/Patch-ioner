@@ -1,0 +1,5 @@
+Ground Truth:   A clock at a train station.
+DeCap:  A train traveling along the platform of a public train.
+DeCap Patches:  A train is on the tracks and going by.
+DeCap Crops:    A black cat is leaning on a black cat.
+Ours:   A clock on a train station platform above a train.
