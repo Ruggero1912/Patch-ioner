@@ -129,26 +129,26 @@ class ExperimentRunner:
         # Task definitions with their script paths and default output directories
         self.tasks = {
             'image_captioning': {
-                'script': 'image_captioning/eval_image_captioning.py',
+                'script': 'eval-image-captioning/eval_image_captioning.py',
                 'default_output_dir': self.results_dir / 'image_captioning',
                 'base_args': [], # No base args for image captioning
                 'default_datasets': ['coco-test.json'] # flickr30k_test_coco.json
             },
             'dense_captioning': {
-                'script': 'dense-captioning-evaluation/eval_densecap.py', 
+                'script': 'eval-dense-captioning/eval_densecap.py', 
                 'default_output_dir': self.results_dir / 'dense_captioning',
                 'base_args': ['--compute_scores', 'True'],
                 'default_datasets': ['vg12'] # vgcoco
             },
             'narratives': {
-                'script': 'narratives/eval_narratives.py',
-                'default_output_dir': self.results_dir / 'narratives', 
-                'base_args': [], # No base args for narratives
-                'default_datasets': ['coco_track_recaptioned_complete.json'] # flickr30k_narratives_cutted_recaptioned_complete.json
+                'script': 'eval-trace-captioning/eval_trace_captioning.py',
+                'default_output_dir': self.results_dir / 'trace_captioning', 
+                'base_args': [], # No base args for trace captioning
+                'default_datasets': ['trace_capt_coco_test.json'] # trace_capt_flickr30k_test.json
             },
             'controllable_captioning': {
-                'script': 'controllable_captioning/eval_set_captioning.py',
-                'default_output_dir': self.results_dir / 'controllable_captioning',
+                'script': 'eval-region-set-captioning/eval_set_captioning.py',
+                'default_output_dir': self.results_dir / 'eval_region_set_captioning',
                 'base_args': [], 
                 'default_datasets': ['coco_entities_test.json'] # flickr30k_entities_test.json
             }
