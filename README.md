@@ -332,3 +332,16 @@ This repository contains code from several other repositories, including:
 - and others.
 
 We acknowledge and thank the authors of these repositories for their contributions.
+
+## Reference
+If you found this code useful, please cite the following paper:
+
+@misc{bianchi2025patchcaptionallunified,
+      title={One Patch to Caption Them All: A Unified Zero-Shot Captioning Framework}, 
+      author={Lorenzo Bianchi and Giacomo Pacini and Fabio Carrara and Nicola Messina and Giuseppe Amato and Fabrizio Falchi},
+      year={2025},
+      eprint={2510.02898},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2510.02898}, 
+}
