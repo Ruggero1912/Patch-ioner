@@ -3,3 +3,6 @@ __pycache__/
 coco-dataset/
 *.h5
 .env
+*-env/
+build/
+patchioner.egg-info/

@@ -9,7 +9,7 @@ import os
 import h5py
 from typing import Tuple
 from dotenv import load_dotenv
-from src.dinotxt_utils import get_tokenizer
+from ...dinotxt_utils import get_tokenizer
 
 load_dotenv()
 

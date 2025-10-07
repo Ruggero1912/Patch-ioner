@@ -9,15 +9,15 @@ import random
 import torchvision.transforms as T
 
 
-from src.decap.decap import decoding_batched, DeCap, MLP
-from src.decap.decap import get_decap_model
-from src.dino_extraction import get_self_attention, process_self_attention, transform_to_standard_dino_out, get_layer_n_output, feats
-from src.decap.im2txtprojection.im2txtprojection import Im2TxtProjector, ProjectionType
-from src.bbox_utils import extract_bboxes_feats, extract_bboxes_feats_double_dino, process_bboxes, map_traces_to_grid
-from src.talk2dino.talk2dino import ProjectionLayer
-from src.proxyclip.proxyclip import ProxyCLIP
+from .decap.decap import decoding_batched, DeCap, MLP
+from .decap.decap import get_decap_model
+from .dino_extraction import get_self_attention, process_self_attention, transform_to_standard_dino_out, get_layer_n_output, feats
+from .decap.im2txtprojection.im2txtprojection import Im2TxtProjector, ProjectionType
+from .bbox_utils import extract_bboxes_feats, extract_bboxes_feats_double_dino, process_bboxes, map_traces_to_grid
+from .talk2dino.talk2dino import ProjectionLayer
+from .proxyclip.proxyclip import ProxyCLIP
 from transformers import GPT2LMHeadModel
-from src.embedding_utils import get_pseudo_inverse, revert_transformation
+from .embedding_utils import get_pseudo_inverse, revert_transformation
 
 
 import math

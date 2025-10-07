@@ -2,7 +2,7 @@ torch
 transformers==4.46.3
 ipykernel
 tqdm
-git+https://github.com/openai/CLIP.git
+clip @ git+https://github.com/openai/CLIP.git
 python-dotenv
 h5py
 scikit-learn

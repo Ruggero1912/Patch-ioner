@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "patchioner"
+version = "0.1.0"
+description = "Patch-ioner: A Unified Zero-Shot Captioning Framework"
+authors = [
+    { name = "Lorenzo Bianchi", email = "lorenzo.bianchi@isti.cnr.it" },
+    { name = "Giacomo Pacini", email = "giacomo.pacini@isti.cnr.it" },
+
+]
+readme = "README.md"
+requires-python = ">=3.8"
+dynamic = ["dependencies"]
+
+[tool.setuptools]
+packages = ["patchioner", "patchioner.decap", 
+"patchioner.decap.im2txtprojection", "patchioner.viecap",
+"patchioner.talk2dino", "patchioner.alphaclip", "patchioner.INViTE", 
+"patchioner.clipcap", "patchioner.denseclip", "patchioner.meacap", 
+"patchioner.proxyclip", "patchioner.proxyclip.open_clip_proxy", "patchioner.regionclip"]
+package-dir = { "patchioner" = "Patch-ioner/src" }
+
+[tool.setuptools.package-data]
+patchioner = ["proxyclip/open_clip_proxy/*.gz"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
