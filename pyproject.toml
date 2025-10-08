@@ -20,11 +20,12 @@ packages = ["patchioner", "patchioner.decap",
 "patchioner.decap.im2txtprojection", "patchioner.viecap",
 "patchioner.talk2dino", "patchioner.alphaclip", "patchioner.INViTE", 
 "patchioner.clipcap", "patchioner.denseclip", "patchioner.meacap", 
+"patchioner.meacap.models", "patchioner.meacap.utils",  
 "patchioner.proxyclip", "patchioner.proxyclip.open_clip_proxy", "patchioner.regionclip"]
 package-dir = { "patchioner" = "Patch-ioner/src" }
 
 [tool.setuptools.package-data]
-patchioner = ["proxyclip/open_clip_proxy/*.gz"]
+patchioner = ["proxyclip/open_clip_proxy/*.gz", "decap/decoder_config.pkl", "viecap/vocabulary/*"]
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}

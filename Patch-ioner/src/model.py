@@ -98,17 +98,17 @@ class Patchioner(nn.Module):
     def __init__(self, projection_type, decoder_weights, device, prefix_size, linear_talk2dino, support_memory_size,
                  dino_model=None, proxyclip_clipmodel=None, proxyclip_vfm=None, use_talk2dino_project=True, normalize=True, attention_type='qkv', talk2dino_config=None, 
                  talk2dino_weights=None, resize_dim=518, crop_dim=518, talk2dino_attn_type='qkv', calculate_argmax_text=False,
-                 online_texts=None, clip_model_name=None, use_open_clip=False, viecap_config=None, regionclip_config=None, invite_config=None, denseclip_config=None, alphaclip_config=None, clipcap_config=None):
+                 online_texts=None, clip_model_name=None, use_open_clip=False, viecap_config=None, regionclip_config=None, invite_config=None, denseclip_config=None, alphaclip_config=None, clipcap_config=None, hf_repo_id=None):
         super().__init__()
 
         self.decoding_method = None
 
         if viecap_config is not None:
             if viecap_config.get('meacap', False):
-                from src.meacap.entrypoint import MeaCap
+                from .meacap.entrypoint import MeaCap
                 self.viecap = MeaCap(viecap_config, device, clip_model_name)
             else:
-                from src.viecap.entrypoint import VieCap
+                from .viecap.entrypoint import VieCap
                 self.viecap = VieCap(viecap_config, device, clip_model_name)
         else:
             self.viecap = None
@@ -160,7 +160,7 @@ class Patchioner(nn.Module):
 
         self.calculate_argmax_text = calculate_argmax_text
         if not self.calculate_argmax_text and decoder_weights is not None:
-            self.decoder = get_decap_model(device, decoder_weights, prefix_size)
+            self.decoder = get_decap_model(device, decoder_weights, prefix_size, hf_repo_id)
         if support_memory_size > 0:
             self.im_proj = Im2TxtProjector(
                 type=projection_type_enum,
@@ -176,6 +176,7 @@ class Patchioner(nn.Module):
                 regionclip_config=regionclip_config,
                 invite_config=invite_config,
                 denseclip_config=denseclip_config,
+                hf_repo_id=hf_repo_id,  # Pass HF repo ID for memory bank downloading
 
                 )
         else:
@@ -662,9 +663,21 @@ class Patchioner(nn.Module):
     @classmethod
     def from_config(cls, config, device='cpu', online_texts=None):
         if type(config) is str:
-            # if the configuration is a string, we treat it as a file path
-            with open(config, 'r') as f:
-                config = yaml.safe_load(f)
+            # if the configuration is a string it is either a path to a yaml file or a huggingface model id
+            if os.path.exists(config):
+                # we treat it as a file path
+                with open(config, 'r') as f:
+                    config = yaml.safe_load(f)
+            else:
+                # let suppose it is a huggingface model id
+                # we want to download config.yaml from the model repository
+                from .hf_utils import get_model_path_with_hf_fallback
+                hf_repo_id = str(config).split('huggingface.co/')[-1] # if the full url is given we extract the repo id
+                print(f"Loading model configuration from HuggingFace repo {hf_repo_id}")
+                config_file = 'config.yaml'
+                config_path = get_model_path_with_hf_fallback(config, hf_repo_id=hf_repo_id, filename=config_file)
+                with open(config_path, 'r') as f:
+                    config = yaml.safe_load(f)
         model = cls(
             projection_type=config.get('projection_type', 'coco'),
             decoder_weights=config.get('decap_weights', None),
@@ -693,6 +706,7 @@ class Patchioner(nn.Module):
             denseclip_config=config.get('denseclip_config', None),
             alphaclip_config=config.get('alphaclip_config', None),
             clipcap_config=config.get('clipcap', None),
+            hf_repo_id=config.get('hf_repo_id', None),
         )
         model.to(device)
         return model

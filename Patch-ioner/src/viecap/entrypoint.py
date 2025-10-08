@@ -10,6 +10,8 @@ import os
 from typing import List
 from argparse import Namespace
 
+from ..hf_utils import load_model_with_hf_fallback
+
 
 class VieCap(torch.nn.Module):
 
@@ -37,7 +39,21 @@ class VieCap(torch.nn.Module):
 
         self.tokenizer = AutoTokenizer.from_pretrained(args.language_model)
         self.model = ClipCaptionModel(args.continuous_prompt_length, args.clip_project_length, self.clip_hidden_size, gpt_type = args.language_model)
-        self.model.load_state_dict(torch.load(args.weight_path, map_location = device), strict = False)
+        
+        # Load model weights with HuggingFace Hub fallback
+        try:
+            hf_repo_id = getattr(args, 'hf_repo_id', None) or args_dict.get('hf_repo_id', None)
+            state_dict = load_model_with_hf_fallback(
+                local_path=args.weight_path,
+                hf_repo_id=hf_repo_id,
+                map_location=device
+            )
+            self.model.load_state_dict(state_dict, strict=False)
+        except Exception as e:
+            print(f"Warning: Failed to load with HF fallback: {e}")
+            # Fallback to original loading method
+            self.model.load_state_dict(torch.load(args.weight_path, map_location=device), strict=False)
+        
         self.model.to(device)
 
         self.eval()
@@ -163,39 +179,44 @@ class VieCap(torch.nn.Module):
 
     def get_viecap_texts_embeddings(self, args, suffix : str):
         suffix = suffix.replace('/', '')
+
+        vocabulary_directory = os.path.join(args.files_path, 'annotations/vocabulary')
+        if not os.path.exists(vocabulary_directory):
+            # try to use vocabulary directory in this file directory
+            vocabulary_directory = os.path.join(os.path.dirname(__file__), 'vocabulary')
         
 
         # loading categories vocabulary for objects
         if args.name_of_entities_text == 'visual_genome_entities':
-            entities_text = load_entities_text(args.name_of_entities_text, os.path.join(args.files_path, 'annotations/vocabulary/all_objects_attributes_relationships.pickle'), not args.disable_all_entities)
+            entities_text = load_entities_text(args.name_of_entities_text, os.path.join(vocabulary_directory, 'all_objects_attributes_relationships.pickle'), not args.disable_all_entities)
             if args.prompt_ensemble: # loading ensemble embeddings
-                texts_embeddings = clip_texts_embeddings(entities_text, os.path.join(args.files_path, f'annotations/vocabulary/visual_genome_embedding_{suffix}_with_ensemble.pickle'))
+                texts_embeddings = clip_texts_embeddings(entities_text, os.path.join(vocabulary_directory, f'visual_genome_embedding_{suffix}_with_ensemble.pickle'))
             else:
-                texts_embeddings = clip_texts_embeddings(entities_text, os.path.join(args.files_path, f'annotations/vocabulary/visual_genome_embedding_{suffix}.pickle'))
+                texts_embeddings = clip_texts_embeddings(entities_text, os.path.join(vocabulary_directory, f'visual_genome_embedding_{suffix}.pickle'))
         elif args.name_of_entities_text == 'coco_entities':
-            entities_text = load_entities_text(args.name_of_entities_text, os.path.join(args.files_path, 'annotations/vocabulary/coco_categories.json'), not args.disable_all_entities)
+            entities_text = load_entities_text(args.name_of_entities_text, os.path.join(vocabulary_directory, 'coco_categories.json'), not args.disable_all_entities)
             if args.prompt_ensemble:
-                texts_embeddings = clip_texts_embeddings(entities_text, os.path.join(args.files_path, f'annotations/vocabulary/coco_embeddings_{suffix}_with_ensemble.pickle'))
+                texts_embeddings = clip_texts_embeddings(entities_text, os.path.join(vocabulary_directory, f'coco_embeddings_{suffix}_with_ensemble.pickle'))
             else:
-                texts_embeddings = clip_texts_embeddings(entities_text, os.path.join(args.files_path, f'annotations/vocabulary/coco_embeddings_{suffix}.pickle'))
+                texts_embeddings = clip_texts_embeddings(entities_text, os.path.join(vocabulary_directory, f'coco_embeddings_{suffix}.pickle'))
         elif args.name_of_entities_text == 'open_image_entities':
-            entities_text = load_entities_text(args.name_of_entities_text, './annotations/vocabulary/oidv7-class-descriptions-boxable.csv', not args.disable_all_entities)
+            entities_text = load_entities_text(args.name_of_entities_text, os.path.join(vocabulary_directory, 'oidv7-class-descriptions-boxable.csv'), not args.disable_all_entities)
             if args.prompt_ensemble:
-                texts_embeddings = clip_texts_embeddings(entities_text, f'./annotations/vocabulary/open_image_embeddings_{suffix}_with_ensemble.pickle')
+                texts_embeddings = clip_texts_embeddings(entities_text, os.path.join(vocabulary_directory, f'open_image_embeddings_{suffix}_with_ensemble.pickle'))
             else:
-                texts_embeddings = clip_texts_embeddings(entities_text, f'./annotations/vocabulary/open_image_embeddings_{suffix}.pickle')
+                texts_embeddings = clip_texts_embeddings(entities_text, os.path.join(vocabulary_directory, f'open_image_embeddings_{suffix}.pickle'))
         elif args.name_of_entities_text == 'vinvl_vg_entities':
-            entities_text = load_entities_text(args.name_of_entities_text, './annotations/vocabulary/VG-SGG-dicts-vgoi6-clipped.json', not args.disable_all_entities)
+            entities_text = load_entities_text(args.name_of_entities_text, os.path.join(vocabulary_directory, 'VG-SGG-dicts-vgoi6-clipped.json'), not args.disable_all_entities)
             if args.prompt_ensemble:
-                texts_embeddings = clip_texts_embeddings(entities_text, f'./annotations/vocabulary/vg_embeddings_{suffix}_with_ensemble.pickle')
+                texts_embeddings = clip_texts_embeddings(entities_text, os.path.join(vocabulary_directory, f'vg_embeddings_{suffix}_with_ensemble.pickle'))
             else:
-                texts_embeddings = clip_texts_embeddings(entities_text, f'./annotations/vocabulary/vg_embeddings_{suffix}.pickle')
+                texts_embeddings = clip_texts_embeddings(entities_text, os.path.join(vocabulary_directory, f'vg_embeddings_{suffix}.pickle'))
         elif args.name_of_entities_text == 'vinvl_vgoi_entities':
-            entities_text = load_entities_text(args.name_of_entities_text, os.path.join(args.files_path, 'annotations/vocabulary/vgcocooiobjects_v1_class2ind.json'), not args.disable_all_entities)
+            entities_text = load_entities_text(args.name_of_entities_text, os.path.join(vocabulary_directory, 'vgcocooiobjects_v1_class2ind.json'), not args.disable_all_entities)
             if args.prompt_ensemble:
-                texts_embeddings = clip_texts_embeddings(entities_text, os.path.join(args.files_path, f'annotations/vocabulary/vgoi_embeddings_{suffix}_with_ensemble.pickle'))
+                texts_embeddings = clip_texts_embeddings(entities_text, os.path.join(vocabulary_directory, f'vgoi_embeddings_{suffix}_with_ensemble.pickle'))
             else:
-                texts_embeddings = clip_texts_embeddings(entities_text, os.path.join(args.files_path, f'annotations/vocabulary/vgoi_embeddings_{suffix}.pickle'))
+                texts_embeddings = clip_texts_embeddings(entities_text, os.path.join(vocabulary_directory, f'vgoi_embeddings_{suffix}.pickle'))
         else:
             print('The entities text should be input correctly!')
             return None

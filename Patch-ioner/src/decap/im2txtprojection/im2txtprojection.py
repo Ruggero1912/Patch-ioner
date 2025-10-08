@@ -10,6 +10,8 @@ import h5py
 from typing import Tuple
 from dotenv import load_dotenv
 from ...dinotxt_utils import get_tokenizer
+# Import HuggingFace Hub utilities for memory bank downloading
+from ...hf_utils import get_model_path_with_hf_fallback
 
 load_dotenv()
 
@@ -77,11 +79,169 @@ class Im2TxtProjector:
             'config_name': config_name
         }
 
+    @staticmethod
+    def _build_filename_components(
+        projection_type, 
+        clip_modelname: str,
+        support_memory_size: int,
+        use_talk2dino: bool = True,
+        linear_talk2dino: bool = False,
+        talk2dino_attn_type: str = 'qkv',
+        memory_bank_name: str = None,
+        use_open_clip: bool = False,
+        regionclip_config=None,
+        invite_config=None,
+        denseclip_config=None
+    ) -> tuple:
+        """
+        Build filename components for HDF5 memory bank file.
+        
+        Returns:
+            tuple: (prefix, dataset_name, talk2dino_attn_type_str, postfix)
+        """
+        
+        # Determine prefix based on model configuration
+        if use_talk2dino:
+            prefix = ""
+            postfix = '-B16' if use_talk2dino is True else use_talk2dino
+            if linear_talk2dino:
+                postfix += "-linear"
+        elif invite_config is not None:
+            prefix = "invite-"
+            postfix = ""
+        elif regionclip_config is not None:
+            prefix = "regionclip-"
+            postfix = ""
+        elif denseclip_config is not None:
+            prefix = "denseclip-"
+            postfix = ""
+        else:
+            prefix = "clip-"
+            postfix = ""
+            
+        # Handle attention type
+        if talk2dino_attn_type != 'qkv':
+            talk2dino_attn_type_str = f"_{talk2dino_attn_type}"
+        else:
+            talk2dino_attn_type_str = ''
+        
+        # Determine dataset name
+        if isinstance(projection_type, ProjectionType):
+            dataset_name = projection_type.value 
+        elif isinstance(projection_type, str):
+            # Try to match string to ProjectionType
+            try:
+                proj_type = ProjectionType(projection_type)
+                dataset_name = proj_type.value
+            except ValueError:
+                # If not a ProjectionType, treat as file path or custom name
+                if os.path.exists(projection_type):
+                    # It's a file path, try to infer dataset name
+                    basename = os.path.basename(projection_type)
+                    if 'karpathy' in basename.lower():
+                        dataset_name = 'coco_captions'
+                    elif 'coco' in basename.lower():
+                        dataset_name = 'coco_captions' 
+                    elif 'vg' in basename.lower():
+                        dataset_name = 'vg_captions'
+                    elif 'marco' in basename.lower():
+                        dataset_name = 'ms_marco_queries_a'
+                    else:
+                        dataset_name = 'coco_captions'  # default
+                else:
+                    dataset_name = projection_type  # use as is
+        elif memory_bank_name is not None:
+            dataset_name = memory_bank_name
+        else:
+            dataset_name = 'coco_captions' if use_talk2dino else 'coco'  # different defaults for legacy compatibility
+
+        # Handle postfix modifications            
+        if use_open_clip:
+            postfix += "-open_clip"
+        elif regionclip_config is not None:
+            postfix += "-regionclip"
+            # Add checkpoint identifier to make filename unique
+            checkpoint_path = regionclip_config.get('checkpoint', '')
+            checkpoint_name = os.path.basename(checkpoint_path).replace('.pth', '').replace('.pt', '')
+            if checkpoint_name:
+                postfix += f"-{checkpoint_name}"
+        elif denseclip_config is not None:
+            postfix += "-denseclip"
+            # Add config identifier to make filename unique
+            config_name = os.path.basename(denseclip_config).replace('.yaml', '').replace('.yml', '')
+            if config_name:
+                postfix += f"-{config_name}"
+
+        return prefix, dataset_name, talk2dino_attn_type_str, postfix
+
+    @staticmethod
+    def get_memory_bank_filename_and_path(
+        projection_type, 
+        clip_modelname: str = 'ViT-B/32',
+        support_memory_size: int = SUPPORT_MEMORY_SIZE,
+        use_talk2dino: bool = True,
+        linear_talk2dino: bool = False,
+        talk2dino_attn_type: str = 'qkv',
+        memory_bank_name: str = None,
+        use_open_clip: bool = False,
+        regionclip_config=None,
+        invite_config=None,
+        denseclip_config=None,
+        im2txt_memory_path: str = None
+    ) -> tuple:
+        """
+        Get the HDF5 memory bank filename and full path for a given configuration.
+        
+        Args:
+            projection_type: ProjectionType enum or string
+            clip_modelname: Name of the CLIP model
+            support_memory_size: Size of the memory bank
+            use_talk2dino: Whether to use Talk2DINO projection
+            linear_talk2dino: Whether to use linear Talk2DINO
+            talk2dino_attn_type: Attention type for Talk2DINO
+            memory_bank_name: Custom memory bank name
+            use_open_clip: Whether to use OpenCLIP
+            regionclip_config: RegionCLIP configuration
+            invite_config: INViTE configuration
+            denseclip_config: DenseClip configuration
+            im2txt_memory_path: Path to im2txt memories (if None, uses env var or default)
+            
+        Returns:
+            tuple: (filename, full_path) where filename is just the .h5 file name
+                   and full_path is the complete path to the file
+        """
+        
+        # Get memory path
+        if im2txt_memory_path is None:
+            im2txt_memory_path = os.getenv("IM2TXT_MEMORY_PATH", "/im2txtmemories")
+        
+        # Use the shared filename construction logic
+        prefix, dataset_name, talk2dino_attn_type_str, postfix = Im2TxtProjector._build_filename_components(
+            projection_type=projection_type,
+            clip_modelname=clip_modelname,
+            support_memory_size=support_memory_size,
+            use_talk2dino=use_talk2dino,
+            linear_talk2dino=linear_talk2dino,
+            talk2dino_attn_type=talk2dino_attn_type,
+            memory_bank_name=memory_bank_name,
+            use_open_clip=use_open_clip,
+            regionclip_config=regionclip_config,
+            invite_config=invite_config,
+            denseclip_config=denseclip_config
+        )
+
+        # Construct filename
+        filename = prefix + f'{dataset_name}_text_embeddings{talk2dino_attn_type_str}{postfix}-{clip_modelname.replace("/", ".")}-{support_memory_size}.h5'
+        full_path = os.path.join(im2txt_memory_path, filename)
+        
+        return filename, full_path
+
     def __init__(self, type = ProjectionType.COCO_CAPTIONS, verbose : bool = True, device_str = "cpu", use_talk2dino : bool = True, 
                  support_memory_size : int = SUPPORT_MEMORY_SIZE, batch_size=1000, 
                  clip_modelname = None, linear_talk2dino : bool = False, 
                  normalize_memory_embs : bool = False, talk2dino_attn_type='qkv', online_texts=None,
-                 memory_bank_name = None, use_open_clip = False, regionclip_config=None, invite_config=None, denseclip_config=None) -> None:
+                 memory_bank_name = None, use_open_clip = False, regionclip_config=None, invite_config=None, denseclip_config=None,
+                 hf_repo_id=None, memory_bank_hf_repo_id=None) -> None:
         """
         - normalize_memory_embs -> normalizes the embeddings memory (required for projection in CLIP space)
         - type : ProjectionType -> the type of the support memory to be built . Can either be the path to the file containing the captions or the type of the support memory to be built
@@ -98,6 +258,8 @@ class Im2TxtProjector:
         self.linear_talk2dino = linear_talk2dino
         self.talk2dino_attn_type = talk2dino_attn_type
         self.online_texts = online_texts
+        self.hf_repo_id = hf_repo_id
+        self.memory_bank_hf_repo_id = memory_bank_hf_repo_id or hf_repo_id
         self.use_open_clip = use_open_clip
         self.regionclip_config = regionclip_config
         self.invite_config = invite_config
@@ -135,48 +297,28 @@ class Im2TxtProjector:
         self.clip_modelname = clip_modelname
 
         self.SUPPORT_MEMORY_SIZE = support_memory_size
-        if use_talk2dino:
-            prefix = ""
-            postfix = '-B16' if use_talk2dino is True else use_talk2dino
-            if linear_talk2dino:
-                postfix += "-linear"
-        elif regionclip_config is not None:
-            prefix = "regionclip-"
-            postfix = ""
-        elif denseclip_config is not None:
-            prefix = "denseclip-"
-            postfix = ""
-        else:
-            prefix = "clip-"
-            postfix = ""
-        if talk2dino_attn_type != 'qkv':
-            self.talk2dino_attn_type_str = f"_{talk2dino_attn_type}"
-        else:
-            self.talk2dino_attn_type_str = ''
-        if isinstance(type, ProjectionType):
-            dataset_name = type.value 
-        elif memory_bank_name is not None:
-            dataset_name = memory_bank_name
-        else:
-            dataset_name = 'coco'
-
-        if use_open_clip:
-            postfix += "-open_clip"
-        elif regionclip_config is not None:
-            postfix += "-regionclip"
-            # Add checkpoint identifier to make filename unique
-            checkpoint_path = regionclip_config.get('checkpoint', '')
-            checkpoint_name = os.path.basename(checkpoint_path).replace('.pth', '').replace('.pt', '')
-            if checkpoint_name:
-                postfix += f"-{checkpoint_name}"
-        elif denseclip_config is not None:
-            postfix += "-denseclip"
-            # Add config identifier to make filename unique
-            config_name = os.path.basename(denseclip_config).replace('.yaml', '').replace('.yml', '')
-            if config_name:
-                postfix += f"-{config_name}"
-
-        self.H5PY_FILE_PATH = os.path.join( self.__IM2TXT_MEMORY_PATH, prefix + f'{dataset_name}{self.talk2dino_attn_type_str}_text_embeddings{postfix}-{clip_modelname.replace("/", ".")}-{self.SUPPORT_MEMORY_SIZE}.h5' )
+        
+        # Use the shared filename construction logic
+        prefix, dataset_name, talk2dino_attn_type_str, postfix = self._build_filename_components(
+            projection_type=type,
+            clip_modelname=clip_modelname,
+            support_memory_size=support_memory_size,
+            use_talk2dino=use_talk2dino,
+            linear_talk2dino=linear_talk2dino,
+            talk2dino_attn_type=talk2dino_attn_type,
+            memory_bank_name=memory_bank_name,
+            use_open_clip=use_open_clip,
+            regionclip_config=regionclip_config,
+            invite_config=invite_config,
+            denseclip_config=denseclip_config
+        )
+        
+        # Store for later use
+        self.talk2dino_attn_type_str = talk2dino_attn_type_str
+        
+        # Construct full file path
+        filename = prefix + f'{dataset_name}_text_embeddings{talk2dino_attn_type_str}{postfix}-{clip_modelname.replace("/", ".")}-{self.SUPPORT_MEMORY_SIZE}.h5'
+        self.H5PY_FILE_PATH = os.path.join(self.__IM2TXT_MEMORY_PATH, filename)
         self.H5PY_EMBEDDINGS_DATASET_NAME = '{}-embeddings'.format(dataset_name)
         self.H5PY_TEXT_DATASET_NAME = '{}-text'.format(dataset_name)
 
@@ -246,11 +388,13 @@ class Im2TxtProjector:
         if self.type == ProjectionType.ONLINE_TEXTS:
             print(f"[-] _load_support_memory: support memory for provided texts will be constructed [-]")
             return None, None          
-        if not os.path.exists(self.H5PY_FILE_PATH):
-            print(f"[-] _load_support_memory: the path '{self.H5PY_FILE_PATH}' does not exist [-]")
+        
+        # Try to resolve the HDF5 file path with HuggingFace Hub fallback
+        resolved_h5py_path = self._resolve_memory_bank_path()
+        if resolved_h5py_path is None:
             return None, None
 
-        with h5py.File(self.H5PY_FILE_PATH, 'r') as hf:
+        with h5py.File(resolved_h5py_path, 'r') as hf:
 
             if self.H5PY_EMBEDDINGS_DATASET_NAME in hf:
                 embeddings_dataset = hf[self.H5PY_EMBEDDINGS_DATASET_NAME][:]
@@ -262,6 +406,43 @@ class Im2TxtProjector:
             embeddings_dataset = embeddings_dataset[:, 1024:] # Get patch-aligned text embeddings
         return embeddings_dataset, text_dataset
 
+    def _resolve_memory_bank_path(self) -> str:
+        """
+        Resolve the memory bank HDF5 file path with HuggingFace Hub fallback.
+        
+        Returns:
+            Path to the memory bank file (local or cached from HF Hub) or None if not found
+        """
+        # If local file exists, use it
+        if os.path.exists(self.H5PY_FILE_PATH):
+            print(f"[-] Using local memory bank: {self.H5PY_FILE_PATH} [-]")
+            return self.H5PY_FILE_PATH
+        
+        # Try HuggingFace Hub fallback if available and configured
+        if get_model_path_with_hf_fallback is not None and self.memory_bank_hf_repo_id is not None:
+            try:
+                # Extract filename from the full path for HF Hub lookup
+                h5py_filename = os.path.basename(self.H5PY_FILE_PATH)
+                
+                print(f"[-] Local memory bank not found, trying HuggingFace Hub: {self.memory_bank_hf_repo_id}/{h5py_filename} [-]")
+                
+                resolved_path = get_model_path_with_hf_fallback(
+                    local_path=self.H5PY_FILE_PATH,
+                    hf_repo_id=self.memory_bank_hf_repo_id,
+                    filename=h5py_filename
+                )
+                
+                print(f"[-] Successfully resolved memory bank from HF Hub: {resolved_path} [-]")
+                return resolved_path
+                
+            except Exception as e:
+                print(f"[-] Failed to download memory bank from HuggingFace Hub: {e} [-]")
+        
+        # If no HF Hub configuration or download failed
+        if self.memory_bank_hf_repo_id is None:
+            print(f"[-] _load_support_memory: the path '{self.H5PY_FILE_PATH}' does not exist and no HF repository configured [-]")
+        
+        return None
 
         
     def _build_support_memory(self, batch_size = 1000) -> Tuple[np.ndarray, np.ndarray]:

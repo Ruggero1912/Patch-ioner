@@ -18,6 +18,10 @@ import random
 from torch.utils.data import Dataset, DataLoader
 from enum import Enum
 from transformers import GPT2Tokenizer, GPT2LMHeadModel, AdamW, get_linear_schedule_with_warmup
+
+# Import HuggingFace Hub utilities for model loading
+from ..hf_utils import load_model_with_hf_fallback
+
 from tqdm import tqdm
 import os
 import pickle
@@ -182,12 +186,38 @@ def decoding_batched(model, clip_features, compute_scores : bool = False, decodi
 
 decap_model = None
 
-def get_decap_model(device, weights_path = DECAP_COCO_WEIGHTS_PATH, prefix_size=512):
+def get_decap_model(device, weights_path = DECAP_COCO_WEIGHTS_PATH, prefix_size=512, hf_repo_id=None):
+    """
+    Load a DeCap model from local checkpoint or HuggingFace Hub.
+    
+    Args:
+        device: Device to load the model on
+        weights_path: Path to local checkpoint file
+        prefix_size: Size of the prefix for the model
+        hf_repo_id: HuggingFace repository ID for fallback download
+        
+    Returns:
+        Loaded DeCap model
+    """
     #global decap_model
     #if decap_model is not None:
     #    return decap_model
     decap_model = DeCap(prefix_size)
-    decap_model.load_state_dict(torch.load(weights_path,map_location= torch.device('cpu')), strict=False)
+    
+    # Try to load with HuggingFace Hub fallback
+    try:
+        
+        state_dict = load_model_with_hf_fallback(
+            local_path=weights_path,
+            hf_repo_id=hf_repo_id,
+            map_location=torch.device('cpu')
+        )
+        decap_model.load_state_dict(state_dict, strict=False)
+    except Exception as e:
+        print(f"Warning: Failed to load with HF fallback: {e}")
+        # Fallback to original loading method
+        decap_model.load_state_dict(torch.load(weights_path, map_location=torch.device('cpu')), strict=False)
+    
     decap_model = decap_model.to(device)
     decap_model = decap_model.eval()
     return decap_model

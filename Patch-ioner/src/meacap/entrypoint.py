@@ -4,9 +4,11 @@ import os, sys
 if os.path.abspath(os.path.join(os.path.dirname(__file__), '..')) not in sys.path:
     sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from viecap.entrypoint import VieCap
-from viecap.utils import compose_discrete_prompts
-from viecap.search import greedy_search, beam_search, opt_search
+from ..hf_utils import get_model_path_with_hf_fallback
+
+from ..viecap.entrypoint import VieCap
+from ..viecap.utils import compose_discrete_prompts
+from ..viecap.search import greedy_search, beam_search, opt_search
 
 from .models.clip_utils import CLIP
 
@@ -44,9 +46,28 @@ class MeaCap(VieCap):
 
         memory_id = args.meacap.memory_id
         memory_base_path = args.meacap.memory_base_path
-        memory_caption_path = os.path.join(memory_base_path, f"memory/{memory_id}", "memory_captions.json")
-        memory_clip_embedding_file = os.path.join(memory_base_path, f"memory/{memory_id}", "memory_clip_embeddings.pt")
-        memory_wte_embedding_file = os.path.join(memory_base_path, f"memory/{memory_id}", "memory_wte_embeddings.pt")
+        
+        memory_caption_relative_path = f"memory/{memory_id}/memory_captions.json"
+        memory_caption_local_path = os.path.join(memory_base_path, memory_caption_relative_path)
+        memory_caption_path = get_model_path_with_hf_fallback(
+            local_path=memory_caption_local_path,
+            hf_repo_id=args.meacap.hf_repo_id,
+            filename=memory_caption_relative_path
+        )
+        memory_clip_embedding_relative_path = f"memory/{memory_id}/memory_clip_embeddings.pt"
+        memory_clip_embedding_local_file = os.path.join(memory_base_path, memory_clip_embedding_relative_path)
+        memory_clip_embedding_file = get_model_path_with_hf_fallback(
+            local_path=memory_clip_embedding_local_file,
+            hf_repo_id=args.meacap.hf_repo_id,
+            filename=memory_clip_embedding_relative_path
+        )
+        memory_wte_embedding_relative_path = f"memory/{memory_id}/memory_wte_embeddings.pt"
+        memory_wte_embedding_local_file = os.path.join(memory_base_path, memory_wte_embedding_relative_path)
+        memory_wte_embedding_file = get_model_path_with_hf_fallback(
+            local_path=memory_wte_embedding_local_file,
+            hf_repo_id=args.meacap.hf_repo_id,
+            filename=memory_wte_embedding_relative_path
+        )
         
         self.memory_clip_embeddings = torch.load(memory_clip_embedding_file, map_location=self.device).to(self.device)
         self.memory_wte_embeddings = torch.load(memory_wte_embedding_file, map_location=self.device).to(self.device)

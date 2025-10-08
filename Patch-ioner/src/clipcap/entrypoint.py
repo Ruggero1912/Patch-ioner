@@ -9,6 +9,9 @@ from enum import Enum
 
 import torch.nn.functional as nnf
 
+# Import HuggingFace Hub utilities for model loading
+from ..hf_utils import load_model_with_hf_fallback
+
 class MappingType(Enum):
     MLP = 'mlp'
     Transformer = 'transformer'
@@ -413,10 +416,22 @@ class ClipCapModel(torch.nn.Module):
                 mapping_type=mapping_type
             )
         
-        # Load trained weights
+        # Load trained weights with HuggingFace Hub fallback
         print(f"Loading ClipCap weights from: {args.weight_path}")
-        checkpoint = torch.load(args.weight_path, map_location=device)
-        self.model.load_state_dict(checkpoint, strict=False)
+        try:
+            hf_repo_id = getattr(args, 'hf_repo_id', None) or getattr(args, 'weight_path_hf_repo_id', None)
+            checkpoint = load_model_with_hf_fallback(
+                local_path=args.weight_path,
+                hf_repo_id=hf_repo_id,
+                map_location=device
+            )
+            self.model.load_state_dict(checkpoint, strict=False)
+        except Exception as e:
+            print(f"Warning: Failed to load with HF fallback: {e}")
+            # Fallback to original loading method
+            checkpoint = torch.load(args.weight_path, map_location=device)
+            self.model.load_state_dict(checkpoint, strict=False)
+        
         self.model.to(device)
         self.model.eval()
 
