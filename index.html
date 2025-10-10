@@ -510,9 +510,8 @@
   overflow-x: auto;
 }
 
-.content code {
-  background-color: #f0f0f0;
-  color: #c7254e;
+.content code.python {
+  color: #fde9ee;
   border-radius: 4px;
   padding: 0.15em 0.4em;
 }
@@ -533,7 +532,7 @@
       To install locally create an empty python virtual environment (recommended), then:
     </p>
 
-<pre><code>pip install git+https://github.com/Ruggero1912/Patch-ioner.git
+<pre><code class="python">pip install git+https://github.com/Ruggero1912/Patch-ioner.git
 </code></pre>
 
     <p>
@@ -545,7 +544,7 @@
       Example:
     </p>
 
-<pre><code>from patchioner import Patchioner
+<pre><code class="python">from patchioner import Patchioner
 model = Patchioner.from_config("Ruggero1912/Patch-ioner_talk2dino_decap_COCO_Captions")
 </code></pre>
 
