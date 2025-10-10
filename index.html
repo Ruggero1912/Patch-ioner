@@ -220,7 +220,7 @@
                   </a>
               </span>
               <span class="link-block">
-                <a href="https://github.com/Ruggero1912/Patch-ioner"
+                <a href="https://huggingface.co/collections/Ruggero1912/patch-ioner-68e7ae42fed581777266b76a"
                    class="external-link button is-normal is-rounded is-dark">
                   <span class="icon">
                       <i class="fas fa-balance-scale"></i>
@@ -501,9 +501,49 @@
 </section>
 -->
 
+<section class="section hero is-light">
+  <div class="container is-max-desktop content">
+    <h2 class="title is-3">Installation and Checkpoints</h2>
+    <p>
+      You can try <b>Patch-ioner</b> directly in your browser using our
+      <a href="https://huggingface.co/spaces/Ruggero1912/Patch-ioner" target="_blank">
+        <b>Hugging Face Demo</b>
+      </a>.
+    </p>
+
+    <p>
+      To install locally create an empty python virtual environment (recommended), then:
+    </p>
+
+<pre><code>pip install git+https://github.com/Ruggero1912/Patch-ioner.git
+</code></pre>
+
+    <p>
+      All available model checkpoints are hosted on Hugging Face:
+      <ul>
+        <li>
+          <a href="https://huggingface.co/collections/Ruggero1912/patch-ioner-68e7ae42fed581777266b76a" target="_blank">
+            <b>Patch-ioner Model Collection</b>
+          </a>
+        </li>
+      </ul>
+    </p>
+
+    <p>
+      Each model can be loaded through the from_config method, that can fetch the checkpoints weights from HuggingFace hub.  
+      Example:
+    </p>
+
+<pre><code>from patchioner import Patchioner
+model = Patchioner.from_config("Ruggero1912/Patch-ioner_talk2dino_decap_COCO_Captions")
+</code></pre>
+
+  </div>
+</section>
+
 
 <section class="section hero is-light id="BibTeX">
-  <div class="container is-max-desktop content">
+  <div class="container is-max-desktop content" style="max-width: 90%;">
     <h2 class="title">BibTeX</h2>
     <pre><code>@misc{bianchi2025patchcaptionallunified,
       title={One Patch to Caption Them All: A Unified Zero-Shot Captioning Framework}, 
