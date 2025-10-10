@@ -36,6 +36,8 @@ You can easily load a pretrained model from Hugging Face using the following API
 ```python
 from patchioner import Patchioner
 
+MODEL_ID = "Ruggero1912/Patch-ioner_talk2dino_decap_COCO_Captions"
+
 model = Patchioner.from_config(MODEL_ID)
 ```
 
@@ -44,10 +46,10 @@ You can browse all models in the Patch-ioner collection:
 
 | Model Name | Description / Variant | Hugging Face Link |
 |---|---|---|
-| `patchioner_talk2dino_decap_COCO_Captions` | Talk2DINO + DeCap variant trained on COCO | [🔗](https://huggingface.co/Ruggero1912/Patch-ioner_talk2dino_decap_COCO_Captions) |
-| `patchioner_talk2dino_capdec_COCO_Captions` | Talk2DINO + CapDec variant trained on COCO | [🔗](https://huggingface.co/Ruggero1912/Patch-ioner_talk2dino_capdec_COCO_Captions) |
-| `patchioner_talk2dino_viecap_COCO_Captions` | Talk2DINO + ViECap variant trained on COCO | [🔗](https://huggingface.co/Ruggero1912/Patch-ioner_talk2dino_viecap_COCO_Captions) |
-| `patchioner_talk2dino_meacap_COCO_Captions` | Talk2DINO + MeaCap variant trained on COCO | [🔗](https://huggingface.co/Ruggero1912/Patch-ioner_talk2dino_meacap_COCO_Captions) |
+| `Ruggero1912/Patch-ioner_talk2dino_decap_COCO_Captions` | Talk2DINO + DeCap variant trained on COCO | [🔗](https://huggingface.co/Ruggero1912/Patch-ioner_talk2dino_decap_COCO_Captions) |
+| `Ruggero1912/Patch-ioner_talk2dino_capdec_COCO_Captions` | Talk2DINO + CapDec variant trained on COCO | [🔗](https://huggingface.co/Ruggero1912/Patch-ioner_talk2dino_capdec_COCO_Captions) |
+| `Ruggero1912/Patch-ioner_talk2dino_Viecap_COCO_Captions` | Talk2DINO + ViECap variant trained on COCO | [🔗](https://huggingface.co/Ruggero1912/Patch-ioner_talk2dino_viecap_COCO_Captions) |
+| `Ruggero1912/Patch-ioner_talk2dino_Meacap_COCO_Captions` | Talk2DINO + MeaCap variant trained on COCO | [🔗](https://huggingface.co/Ruggero1912/Patch-ioner_talk2dino_meacap_COCO_Captions) |
 
 
 ## Trace Captioning Dataset Test Splits
