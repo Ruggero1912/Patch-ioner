@@ -42,7 +42,7 @@ model = Patchioner.from_config(MODEL_ID)
 ```
 
 You can browse all models in the Patch-ioner collection:  
-[Patch-ioner Models Collection](https://huggingface.co/collections/Ruggero1912/patch-ioner-68e7ae42fed581777266b76a) :contentReference[oaicite:0]{index=0}
+[Patch-ioner Models Collection](https://huggingface.co/collections/Ruggero1912/patch-ioner-68e7ae42fed581777266b76a)
 
 | Model Name | Description / Variant | Hugging Face Link |
 |---|---|---|
