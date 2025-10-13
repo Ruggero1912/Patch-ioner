@@ -1,7 +1,55 @@
+<p align="center">
+  <a href="https://arxiv.org/abs/2510.02898">
+    <img src="https://img.shields.io/badge/arXiv-2510.02898-b31b1b.svg?style=for-the-badge&logo=arxiv" alt="arXiv Paper"/>
+  </a>
+  <a href="https://paciosoft.com/Patch-ioner">
+    <img src="https://img.shields.io/badge/🌐%20Project%20Website-success.svg?style=for-the-badge&logo=google-chrome" alt="Project Website"/>
+  </a>
+  <a href="https://huggingface.co/spaces/Ruggero1912/Patch-ioner">
+    <img src="https://img.shields.io/badge/🚀%20Demo-orange.svg?style=for-the-badge&logo=gradio" alt="Demo on Hugging Face Space"/>
+  </a>
+  <a href="https://huggingface.co/collections/Ruggero1912/patch-ioner-68e7ae42fed581777266b76a">
+    <img src="https://img.shields.io/badge/Models-blue.svg?style=for-the-badge&logo=huggingface" alt="Hugging Face Collection"/>
+  </a>
+</p>
+
+---
 # Patch-ioner
 ## **"One Patch to Caption Them All: A Unified Zero-Shot Captioning Framework"** 💍
 
 Official repository containing the code for the paper **"One Patch to Caption Them All: A Unified Zero-Shot Captioning Franework"**.
+
+---
+
+## 🧩 Installation
+
+You can install **Patch-ioner** directly from GitHub using `pip`:
+
+```bash
+pip install git+https://github.com/Ruggero1912/Patch-ioner
+```
+
+## 🚀 Loading a Pretrained Model
+
+You can easily load a pretrained model from Hugging Face using the following API:
+
+```python
+from patchioner import Patchioner
+
+MODEL_ID = "Ruggero1912/Patch-ioner_talk2dino_decap_COCO_Captions"
+
+model = Patchioner.from_config(MODEL_ID)
+```
+
+You can browse all models in the Patch-ioner collection:  
+[Patch-ioner Models Collection](https://huggingface.co/collections/Ruggero1912/patch-ioner-68e7ae42fed581777266b76a)
+
+| Model Name | Description / Variant | Hugging Face Link |
+|---|---|---|
+| `Ruggero1912/Patch-ioner_talk2dino_decap_COCO_Captions` | Talk2DINO + DeCap variant trained on COCO | [🔗](https://huggingface.co/Ruggero1912/Patch-ioner_talk2dino_decap_COCO_Captions) |
+| `Ruggero1912/Patch-ioner_talk2dino_capdec_COCO_Captions` | Talk2DINO + CapDec variant trained on COCO | [🔗](https://huggingface.co/Ruggero1912/Patch-ioner_talk2dino_capdec_COCO_Captions) |
+| `Ruggero1912/Patch-ioner_talk2dino_Viecap_COCO_Captions` | Talk2DINO + ViECap variant trained on COCO | [🔗](https://huggingface.co/Ruggero1912/Patch-ioner_talk2dino_viecap_COCO_Captions) |
+| `Ruggero1912/Patch-ioner_talk2dino_Meacap_COCO_Captions` | Talk2DINO + MeaCap variant trained on COCO | [🔗](https://huggingface.co/Ruggero1912/Patch-ioner_talk2dino_meacap_COCO_Captions) |
 
 
 ## Trace Captioning Dataset Test Splits
