@@ -95,11 +95,12 @@ def compute_region_means(patch_embeddings, variance):
 
 class Patchioner(nn.Module):
 
-    def __init__(self, projection_type, decoder_weights, device, prefix_size, linear_talk2dino, support_memory_size,
+    def __init__(self, decoder_weights, device, prefix_size, linear_talk2dino, support_memory_size, projection_type = None, 
                  dino_model=None, proxyclip_clipmodel=None, proxyclip_vfm=None, use_talk2dino_project=True, normalize=True, attention_type='qkv', talk2dino_config=None, 
                  talk2dino_weights=None, resize_dim=518, crop_dim=518, talk2dino_attn_type='qkv', calculate_argmax_text=False,
-                 online_texts=None, clip_model_name=None, use_open_clip=False, viecap_config=None, regionclip_config=None, invite_config=None, denseclip_config=None, alphaclip_config=None, clipcap_config=None, hf_repo_id=None):
-        super().__init__()
+                 online_texts=None, clip_model_name=None, use_open_clip=False, viecap_config=None, regionclip_config=None, invite_config=None, denseclip_config=None, alphaclip_config=None, clipcap_config=None, hf_repo_id=None,
+                 **kwargs):
+        super().__init__(**kwargs)
 
         self.decoding_method = None
 
@@ -155,6 +156,8 @@ class Patchioner(nn.Module):
         elif os.path.exists(projection_type):
             print(f"Loading memory bank from {projection_type}")
             projection_type_enum = projection_type
+        elif support_memory_size == 0:
+            projection_type_enum = None
         else:
             raise Exception("The projection_type field must be 'coco', 'msmarco', 'blip' or 'vg'")
 
