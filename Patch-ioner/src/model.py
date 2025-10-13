@@ -153,11 +153,11 @@ class Patchioner(nn.Module):
             projection_type_enum = ProjectionType.VISUAL_GENOME
         elif projection_type == 'vg-test':
             projection_type_enum = ProjectionType.VISUAL_GENOME_TEST
+        elif support_memory_size == 0:
+            projection_type_enum = None
         elif os.path.exists(projection_type):
             print(f"Loading memory bank from {projection_type}")
             projection_type_enum = projection_type
-        elif support_memory_size == 0:
-            projection_type_enum = None
         else:
             raise Exception("The projection_type field must be 'coco', 'msmarco', 'blip' or 'vg'")
 
