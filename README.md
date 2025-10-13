@@ -41,6 +41,16 @@ MODEL_ID = "Ruggero1912/Patch-ioner_talk2dino_decap_COCO_Captions"
 model = Patchioner.from_config(MODEL_ID)
 ```
 
+Patchioner also supports `AutoModel.from_pretrained` of the `transformers` library.
+
+```python
+from transformers import AutoModel
+
+MODEL_ID = "Ruggero1912/Patch-ioner_talk2dino_decap_COCO_Captions"
+
+model = AutoModel.from_pretrained(MODEL_ID, trust_remote_code=True)
+```
+
 You can browse all models in the Patch-ioner collection:  
 [Patch-ioner Models Collection](https://huggingface.co/collections/Ruggero1912/patch-ioner-68e7ae42fed581777266b76a)
 
