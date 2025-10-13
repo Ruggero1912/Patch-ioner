@@ -37,7 +37,14 @@ class MeaCap(VieCap):
         self.wte_model = SentenceTransformer(args.meacap.wte_model_path, device=self.device)
         print('[MeaCap] Load sentenceBERT from the checkpoint {}.'.format(args.meacap.wte_model_path))
 
-        with torch.cuda.device(self.device):
+        # --- Load the Textual Scene Graph parser ---
+        if torch.cuda.is_available() and "cuda" in str(self.device):
+            # Load parser directly on the selected CUDA device
+            with torch.cuda.device(self.device):
+                self.parser_tokenizer = AutoTokenizer.from_pretrained(args.meacap.parser_checkpoint)
+                self.parser_model = AutoModelForSeq2SeqLM.from_pretrained(args.meacap.parser_checkpoint)
+        else:
+            # Fallback to CPU (avoid using torch.cuda.device)
             self.parser_tokenizer = AutoTokenizer.from_pretrained(args.meacap.parser_checkpoint)
             self.parser_model = AutoModelForSeq2SeqLM.from_pretrained(args.meacap.parser_checkpoint)
         self.parser_model.eval()
