@@ -1,0 +1,18 @@
+torch
+transformers==4.46.3
+ipykernel
+tqdm
+clip @ git+https://github.com/openai/CLIP.git
+python-dotenv
+h5py
+scikit-learn
+plotly
+pandas
+matplotlib
+pycocotools
+nbformat
+speaksee
+munkres
+open_clip_torch
+sentence_transformers
+nltk

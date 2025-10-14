@@ -1,7 +1,7 @@
 import torch
 
 from typing import List, Union
-from clip.simple_tokenizer import SimpleTokenizer
+from .clip.simple_tokenizer import SimpleTokenizer
 from torchvision import transforms
 from typing import Sequence
 

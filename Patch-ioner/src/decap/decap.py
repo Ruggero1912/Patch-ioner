@@ -11,7 +11,6 @@ import PIL.Image as Image
 import json
 import random
 import sys
-import clip
 import PIL
 import random
 
@@ -79,7 +78,7 @@ class DeCap(nn.Module):
         out = self.decoder(inputs_embeds=embedding_cat)
         return out
 
-from clip.simple_tokenizer import SimpleTokenizer as _Tokenizer
+from ..clip.simple_tokenizer import SimpleTokenizer as _Tokenizer
 _Tokenizer = _Tokenizer()
 
 def Decoding(model,clip_features):

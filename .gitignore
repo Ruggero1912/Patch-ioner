@@ -6,3 +6,4 @@ coco-dataset/
 *-env/
 build/
 patchioner.egg-info/
+dist/
