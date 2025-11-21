@@ -5,12 +5,12 @@ import torch
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-config_name = "Ruggero1912/Patch-ioner_talk2dino_viecap_COCO_Captions"
+config_name = "(redacted)"
 # "./configs_public/talk2dino_decap_COCO_Captions.yaml"
 model = Patchioner.from_config(config_name, device=device)
 
 # caption one image 
-img_dir = "/raid/homes/giacomo.pacini/decap-dino/decap/test-images"
+img_dir = "<<path_to_your_image_directory>>"
 
 import sys, os
 from PIL import Image

@@ -6,11 +6,6 @@ build-backend = "setuptools.build_meta"
 name = "patchioner"
 version = "0.1.1"
 description = "Patch-ioner: A Unified Zero-Shot Captioning Framework"
-authors = [
-    { name = "Lorenzo Bianchi", email = "lorenzo.bianchi@isti.cnr.it" },
-    { name = "Giacomo Pacini", email = "giacomo.pacini@isti.cnr.it" },
-
-]
 readme = "README.md"
 requires-python = ">=3.8"
 dynamic = ["dependencies"]

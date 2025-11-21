@@ -7,7 +7,7 @@ The `clip_loader` module provides a simple interface to load DenseCLIP checkpoin
 ## 📁 Structure
 
 ```
-/raid/homes/giacomo.pacini/DenseCLIP/clip_loader/
+/clip_loader/
 ├── __init__.py                    # Module initialization
 ├── denseclip_loader.py           # Main loader implementation
 ├── example_usage.py              # Example script
