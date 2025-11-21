@@ -377,6 +377,57 @@ In the case of MeaCap baselines, set the nested fields at `viecap` -> `meacap`. 
 - `memory_base_path`: Path to directory containing MeaCap-related checkpoints and auxiliary data.
 
 
+## **LMM Evaluation (LMMS-Eval Framework)** 💻
+
+This section details how to replicate the performance evaluation for **Large Multimodal Models (LMMs)** using the patched `lmms-eval` framework.
+
+-----
+
+### **1. Setup and Environment**
+
+1.  **Navigate and Install:** Change directory to `lmms_eval` and install the necessary environment by following the instructions provided in the upstream repository:
+    ```bash
+    cd lmms_eval
+    # Follow installation steps from: https://github.com/EvolvingLMMs-Lab/lmms-eval
+    ```
+
+-----
+
+### **2. Prepare Evaluation Datasets (Hugging Face)**
+
+The evaluation requires datasets specifically configured for our tasks (Trace, Dense, Region-Set) and adaptation strategies (Cropping and Visual Prompting), hosted privately on Hugging Face (HF).
+
+1.  **Navigate to Examples:** Go to the examples directory:
+    ```bash
+    cd lmms-eval/examples
+    ```
+2.  **Run Preparation Notebooks:** Execute the three provided Jupyter notebooks to process the data and upload them to your Hugging Face account. **Before running, you must modify the notebooks to insert:**
+      * Your Hugging Face **username** (to create the private datasets in your account).
+      * The **local directory** path where the evaluation images should be stored.
+
+-----
+
+### **3. Run LMM Inference**
+
+The model inference relies on pre-configured task YAML files within the `lmms-eval` environment.
+
+1.  **Configure Task YAMLs:** Navigate to `lmms-eval/lmms_eval/tasks/coco_cap_patchioner`. **You must modify all YAML configuration files in this directory**, substituting the placeholder `user` with your actual Hugging Face username (which matches the user in Step 2) .
+2.  **Set HF Token:** Insert your Hugging Face API token directly into the desired bash script located in `commands_patchioning/` to enable model downloads and dataset access.
+3.  **Execute Inference:** Run the shell script for the model you wish to evaluate. For example, to run inference on all configured datasets for Qwen 2.5 VL:
+    ```bash
+    ./commands_patchioning/qwen2-5vl.sh
+    ```
+    The results (raw model generations) will be saved in the `results_patchioning` directory.
+
+-----
+
+### **4. Calculate Final Metrics**
+
+1.  **Evaluate Results:** To calculate the final CIDEr, RefPAC-S, and other metrics from the generated captions, run the evaluation notebook:
+    ```bash
+    jupyter notebook patchioning_eval/eval.ipynb
+    ```
+
 
 ## Credits
 
