@@ -19,6 +19,9 @@
 
 Official repository containing the code for the paper **"One Patch to Caption Them All: A Unified Zero-Shot Captioning Franework"**.
 
+## Updates
+- :fire: 02/2026: **"One Patch to Caption Them All: A Unified Zero-Shot Captioning Framework"** has been accepted to CVPR2026 in Denver!
+
 ---
 
 ## 🧩 Installation
