@@ -30,6 +30,8 @@ class Im2TxtProjector:
     - OpenCLIP models  
     - RegionCLIP models
     - DenseClip models
+    - INViTE models
+    - SigLIP2 models
     - Talk2DINO projected embeddings
     
     For RegionCLIP usage, pass regionclip_config as a dict with:
@@ -40,6 +42,12 @@ class Im2TxtProjector:
     
     For DenseClip usage, pass denseclip_config as a string with the config file name:
     'denseclip_vitb16'  # or other valid DenseClip config name
+    
+    For SigLIP2 usage, pass siglip2_config as a dict with:
+    {
+        'model_id': 'google/siglip2-base-patch16-512',  # HuggingFace model ID
+        'checkpoint_path': '/path/to/local/checkpoint'  # optional
+    }
     """
 
     SUPPORT_MEMORY_SIZE = 500000
@@ -51,7 +59,7 @@ class Im2TxtProjector:
         print(f"[!] Warning: IM2TXT_MEMORY_PATH not set in environment variables, using '{default_path}' [!]")
         __IM2TXT_MEMORY_PATH = default_path
     
-    __DECAP_FOLDER = os.path.join(os.path.dirname(__file__), "../")
+    __DECAP_FOLDER = os.path.join(os.path.dirname(__file__), "../../../")
     __TALK2DINO_CONFIG_WEIGHTS_PATH = __DECAP_FOLDER
 
     captions_dataType = 'train2017'
@@ -91,7 +99,8 @@ class Im2TxtProjector:
         use_open_clip: bool = False,
         regionclip_config=None,
         invite_config=None,
-        denseclip_config=None
+        denseclip_config=None,
+        siglip2_config=None
     ) -> tuple:
         """
         Build filename components for HDF5 memory bank file.
@@ -115,6 +124,9 @@ class Im2TxtProjector:
         elif denseclip_config is not None:
             prefix = "denseclip-"
             postfix = ""
+        elif siglip2_config is not None:
+            prefix = "siglip2-"
+            postfix = ""
         else:
             prefix = "clip-"
             postfix = ""
@@ -128,6 +140,8 @@ class Im2TxtProjector:
         # Determine dataset name
         if isinstance(projection_type, ProjectionType):
             dataset_name = projection_type.value 
+        elif memory_bank_name is not None:
+            dataset_name = memory_bank_name
         elif isinstance(projection_type, str):
             # Try to match string to ProjectionType
             try:
@@ -150,8 +164,6 @@ class Im2TxtProjector:
                         dataset_name = 'coco_captions'  # default
                 else:
                     dataset_name = projection_type  # use as is
-        elif memory_bank_name is not None:
-            dataset_name = memory_bank_name
         else:
             dataset_name = 'coco_captions' if use_talk2dino else 'coco'  # different defaults for legacy compatibility
 
@@ -240,7 +252,7 @@ class Im2TxtProjector:
                  support_memory_size : int = SUPPORT_MEMORY_SIZE, batch_size=1000, 
                  clip_modelname = None, linear_talk2dino : bool = False, 
                  normalize_memory_embs : bool = False, talk2dino_attn_type='qkv', online_texts=None,
-                 memory_bank_name = None, use_open_clip = False, regionclip_config=None, invite_config=None, denseclip_config=None,
+                 memory_bank_name = None, use_open_clip = False, regionclip_config=None, invite_config=None, denseclip_config=None, siglip2_config=None,
                  hf_repo_id=None, memory_bank_hf_repo_id=None) -> None:
         """
         - normalize_memory_embs -> normalizes the embeddings memory (required for projection in CLIP space)
@@ -264,6 +276,7 @@ class Im2TxtProjector:
         self.regionclip_config = regionclip_config
         self.invite_config = invite_config
         self.denseclip_config = denseclip_config
+        self.siglip2_config = siglip2_config
         
         if use_open_clip:
             assert use_talk2dino is False, "use_open_clip and use_talk2dino cannot be used together"
@@ -282,6 +295,13 @@ class Im2TxtProjector:
             assert use_open_clip is False, "denseclip_config and use_open_clip cannot be used together"
             assert regionclip_config is None, "denseclip_config and regionclip_config cannot be used together"
             
+        if siglip2_config is not None:
+            assert use_talk2dino is False, "siglip2_config and use_talk2dino cannot be used together"
+            assert use_open_clip is False, "siglip2_config and use_open_clip cannot be used together"
+            assert regionclip_config is None, "siglip2_config and regionclip_config cannot be used together"
+            assert denseclip_config is None, "siglip2_config and denseclip_config cannot be used together"
+            assert invite_config is None, "siglip2_config and invite_config cannot be used together"
+            
 
         if clip_modelname is None:
             if self.use_talk2dino:
@@ -292,6 +312,9 @@ class Im2TxtProjector:
             elif denseclip_config is not None:
                 # For DenseClip, we'll use a generic identifier since the model type is in the config
                 clip_modelname = "DenseClip"
+            elif siglip2_config is not None:
+                # For SigLIP2, use the model_id from config
+                clip_modelname = siglip2_config.get('model_id', 'SigLIP2').replace('google/', '').replace('/', '-').lower()
             else:
                 clip_modelname = "ViT-B/32"
         self.clip_modelname = clip_modelname
@@ -310,7 +333,8 @@ class Im2TxtProjector:
             use_open_clip=use_open_clip,
             regionclip_config=regionclip_config,
             invite_config=invite_config,
-            denseclip_config=denseclip_config
+            denseclip_config=denseclip_config,
+            siglip2_config=siglip2_config
         )
         
         # Store for later use
@@ -326,7 +350,7 @@ class Im2TxtProjector:
 
         if text_dataset is None:
             if verbose: 
-                model_type = "RegionCLIP" if regionclip_config is not None else ("DenseClip" if denseclip_config is not None else ("OpenCLIP" if use_open_clip else "CLIP"))
+                model_type = "RegionCLIP" if regionclip_config is not None else ("DenseClip" if denseclip_config is not None else ("SigLIP2" if siglip2_config is not None else ("OpenCLIP" if use_open_clip else "CLIP")))
                 print(f"[+] Going to build support memory for the given data type: {type} using {model_type} [+]")
             embs_dataset, text_dataset = self._build_support_memory(batch_size)
             if verbose: print(f"[+] Done [+]")
@@ -339,6 +363,8 @@ class Im2TxtProjector:
             print(f"[-] Using RegionCLIP text embeddings from checkpoint: {regionclip_config.get('checkpoint', 'Unknown')} [-]")
         elif denseclip_config is not None:
             print(f"[-] Using DenseClip text embeddings from config: {denseclip_config} [-]")
+        elif siglip2_config is not None:
+            print(f"[-] Using SigLIP2 text embeddings from model: {siglip2_config.get('model_id', 'Unknown')} [-]")
 
         self.text_dataset = text_dataset
         self.embs_dataset = torch.tensor(embs_dataset[:]).to(self.device)
@@ -394,6 +420,7 @@ class Im2TxtProjector:
         if resolved_h5py_path is None:
             return None, None
 
+        #print(f"[-] Loading support memory from: {resolved_h5py_path} [-]")
         with h5py.File(resolved_h5py_path, 'r') as hf:
 
             if self.H5PY_EMBEDDINGS_DATASET_NAME in hf:
@@ -508,6 +535,9 @@ class Im2TxtProjector:
         
         self.clip_model.eval()
         
+        # Flag to track if we're using SigLIP2
+        using_siglip2 = hasattr(self, '_using_siglip2') and self._using_siglip2
+        
         n_txts = len(data)
         n_batch = math.ceil(n_txts / batch_size)
         for i in tqdm(range(n_batch)):
@@ -516,8 +546,16 @@ class Im2TxtProjector:
             
             texts = data[start:end]
             with torch.no_grad():
-                texts_token = self.tokenizer(texts).to(self.device)
-                text_feature = self.clip_model.encode_text(texts_token)
+                if using_siglip2:
+                    # SigLIP2 uses a different tokenization and encoding API
+                    texts_token = self.tokenizer(texts, return_tensors="pt", padding=True, truncation=True)
+                    texts_token = {k: v.to(self.device) for k, v in texts_token.items()}
+                    text_feature = self.clip_model.get_text_features(**texts_token)
+                else:
+                    # Standard CLIP, OpenCLIP, RegionCLIP, DenseClip, INViTE
+                    texts_token = self.tokenizer(texts).to(self.device)
+                    text_feature = self.clip_model.encode_text(texts_token)
+                    
                 if self.use_talk2dino:
                     text_feature = self.talk2dino.project_clip_txt(text_feature)
                 text_features.append(text_feature)
@@ -643,6 +681,48 @@ class Im2TxtProjector:
                 print(f"[-] DenseClip text encoding test successful. Output shape: {test_features.shape} [-]")
             except Exception as e:
                 print(f"[!] Warning: DenseClip text encoding test failed: {e} [!]")
+                raise e
+            
+            return
+
+        if self.siglip2_config is not None:
+            print("[-] loading SigLIP2 model [-]")
+            from src.siglip2.loader import load_siglip2, get_siglip2_tokenizer
+            
+            model_id = self.siglip2_config.get('model_id', 'google/siglip2-base-patch16-512')
+            print(f"[-] Loading SigLIP2 from model: {model_id} [-]")
+            
+            # Load SigLIP2 full model (vision + text) for text encoding
+            siglip2_config_for_loading = {
+                'model_id': model_id,
+                'vision_only': False  # We need text encoder
+            }
+            
+            if 'checkpoint_path' in self.siglip2_config:
+                siglip2_config_for_loading['checkpoint_path'] = self.siglip2_config['checkpoint_path']
+            
+            # Load the full SigLIP2 model
+            self.clip_model = load_siglip2(
+                config=siglip2_config_for_loading,
+                device=self.device,
+                load_full_model=True  # Load full model for text encoding
+            )
+            
+            # Get the tokenizer
+            self.tokenizer = get_siglip2_tokenizer(siglip2_config_for_loading)
+            self.preprocess = None  # SigLIP2 doesn't need preprocessing for text encoding
+            
+            # Store a flag to indicate we're using SigLIP2 (for special handling in encoding)
+            self._using_siglip2 = True
+            
+            # Test SigLIP2 text encoding to ensure it works
+            try:
+                test_text = ["A test sentence for SigLIP2"]
+                test_tokens = self.tokenizer(test_text, return_tensors="pt", padding=True, truncation=True)
+                test_features = self.clip_model.get_text_features(**test_tokens.to(self.device))
+                print(f"[-] SigLIP2 text encoding test successful. Output shape: {test_features.shape} [-]")
+            except Exception as e:
+                print(f"[!] Warning: SigLIP2 text encoding test failed: {e} [!]")
                 raise e
             
             return

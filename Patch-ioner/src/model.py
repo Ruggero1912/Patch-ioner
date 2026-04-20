@@ -98,11 +98,14 @@ class Patchioner(nn.Module):
     def __init__(self, decoder_weights, device, prefix_size, linear_talk2dino, support_memory_size, projection_type = None, 
                  dino_model=None, proxyclip_clipmodel=None, proxyclip_vfm=None, use_talk2dino_project=True, normalize=True, attention_type='qkv', talk2dino_config=None, 
                  talk2dino_weights=None, resize_dim=518, crop_dim=518, talk2dino_attn_type='qkv', calculate_argmax_text=False,
-                 online_texts=None, clip_model_name=None, use_open_clip=False, viecap_config=None, regionclip_config=None, invite_config=None, denseclip_config=None, alphaclip_config=None, clipcap_config=None, hf_repo_id=None,
+                 online_texts=None, clip_model_name=None, use_open_clip=False, viecap_config=None, regionclip_config=None, invite_config=None, denseclip_config=None, alphaclip_config=None, siglip2_config=None, clipcap_config=None, hf_repo_id=None, decoder_config=None,
+                 aggregation_config=None, diffusion_bridge_config=None,
                  **kwargs):
         super().__init__(**kwargs)
 
         self.decoding_method = None
+
+        self.decoder_config = decoder_config
 
         if viecap_config is not None:
             if viecap_config.get('meacap', False):
@@ -113,6 +116,10 @@ class Patchioner(nn.Module):
                 self.viecap = VieCap(viecap_config, device, clip_model_name)
         else:
             self.viecap = None
+        
+        if diffusion_bridge_config is not None:
+            from .diffusionbridge.entrypoint import DiffusionBridgeCaptioner
+            self.diffusion_bridge_captioner = DiffusionBridgeCaptioner.from_config(diffusion_bridge_config, device)
 
         if clipcap_config is not None:
             # Determine DINO feature dimension based on model type
@@ -133,6 +140,24 @@ class Patchioner(nn.Module):
         else:
             self.clipcap = None
 
+        # GroupNet initialization for patch aggregation
+        if aggregation_config is not None:
+            from .groupnet.entrypoint import load_groupnet_model
+            
+            # Override embed_dim if not specified in aggregation_config
+            if 'embed_dim' not in aggregation_config and prefix_size is not None:
+                aggregation_config = aggregation_config.copy()  # Don't modify original
+                aggregation_config['embed_dim'] = prefix_size
+            
+            # Load GroupNet using the entrypoint (handles config, weights, and HF fallback)
+            self.groupnet = load_groupnet_model(
+                groupnet_config=aggregation_config,
+                device=device,
+                hf_repo_id=hf_repo_id
+            )
+        else:
+            self.groupnet = None
+
         if dino_model is not None and 'dinotxt' in dino_model:
             clip_model_name = 'DINO.txt'
 
@@ -141,6 +166,7 @@ class Patchioner(nn.Module):
             # AlphaClip will be loaded later after determining patch sizes
             
         # decoder initialization
+        memory_bank_name = None
         if online_texts is not None:
             projection_type_enum = ProjectionType.ONLINE_TEXTS
         elif projection_type == 'coco':
@@ -158,12 +184,16 @@ class Patchioner(nn.Module):
         elif os.path.exists(projection_type):
             print(f"Loading memory bank from {projection_type}")
             projection_type_enum = projection_type
+            projection_type_filename = os.path.basename(projection_type).replace('.json', '')
+            if projection_type_filename not in ['coco_train_karpathy', 'coco_val_karpathy', 'coco_test_karpathy'] and not projection_type_filename.startswith('coco_'):
+                print(f"Setting memory bank name to {projection_type_filename}")
+                memory_bank_name = projection_type_filename
         else:
             raise Exception("The projection_type field must be 'coco', 'msmarco', 'blip' or 'vg'")
 
         self.calculate_argmax_text = calculate_argmax_text
         if not self.calculate_argmax_text and decoder_weights is not None:
-            self.decoder = get_decap_model(device, decoder_weights, prefix_size, hf_repo_id)
+            self.decoder = get_decap_model(device, decoder_weights, prefix_size, hf_repo_id, decoder_kwargs=decoder_config)
         if support_memory_size > 0:
             self.im_proj = Im2TxtProjector(
                 type=projection_type_enum,
@@ -179,7 +209,9 @@ class Patchioner(nn.Module):
                 regionclip_config=regionclip_config,
                 invite_config=invite_config,
                 denseclip_config=denseclip_config,
+                siglip2_config=siglip2_config,
                 hf_repo_id=hf_repo_id,  # Pass HF repo ID for memory bank downloading
+                memory_bank_name=memory_bank_name
 
                 )
         else:
@@ -246,6 +278,11 @@ class Patchioner(nn.Module):
                     else:
                         print(f"Unknown AlphaClip model {model_name}, using default patch size 16")
                         patch_size = 16
+            elif siglip2_config is not None:
+                # For SigLIP2, extract patch size from config
+                from src.siglip2.loader import load_siglip2_config
+                siglip2_config_dict = load_siglip2_config(siglip2_config.get('model_id', 'google/siglip2-base-patch16-512'))
+                patch_size = siglip2_config_dict.get('vision', {}).get('patch_size', 16)
             elif clip_model_name == 'ResNet50x4' and dino_model == 'RN50x4':
                 patch_size = 32  # Effective patch size for ResNet50x4
             else:
@@ -320,6 +357,17 @@ class Patchioner(nn.Module):
                 # For AlphaClip, calculate patch dimensions
                 self.num_patch_tokens = (crop_dim // patch_size) * (crop_dim // patch_size)
                 self.num_tokens = self.num_global_tokens + self.num_patch_tokens
+            elif siglip2_config is not None:
+                # For SigLIP2 ViT, calculate patch dimensions like standard ViT
+                self.num_patch_tokens = (crop_dim // patch_size) * (crop_dim // patch_size)
+                self.num_tokens = self.num_global_tokens + self.num_patch_tokens
+                
+                # SigLIP2 embedding dimensions from config
+                embed_dim = siglip2_config.get('embed_dim', None)
+                if embed_dim is not None:
+                    self.embed_dim = embed_dim
+                else:
+                    self.embed_dim = siglip2_config_dict.get('vision', {}).get('hidden_size', 768)
             elif 'vitl' in dino_model or 'vit_large' in dino_model or 'ViT-L' in dino_model or 'ViT-H' in dino_model:
                 self.embed_dim = 1024
             elif 'vitb' in dino_model or 'vit_base' in dino_model or 'ViT-B' in dino_model:
@@ -551,6 +599,40 @@ class Patchioner(nn.Module):
                         print(f"Unknown AlphaClip model {model_name}, using default patch size 16")
                         self.patch_size = 16
 
+            elif siglip2_config is not None:
+                # load SigLIP2 model
+                from src.siglip2.loader import load_siglip2, load_siglip2_processor
+                
+                print(f"Loading SigLIP2 model with config: {siglip2_config}")
+                
+                # Load SigLIP2 vision model using the config
+                self.dino = load_siglip2(config=siglip2_config, device=device, load_full_model=False)
+                
+                # Load processor for image transformations
+                _, processor = load_siglip2_processor(config=siglip2_config, device=device)
+                
+                # Use SigLIP2's image processor transforms
+                # We'll create custom transforms that match the expected preprocessing
+                self.image_transforms = T.Compose([
+                    T.Resize(resize_dim, interpolation=T.InterpolationMode.BICUBIC),
+                    T.CenterCrop(crop_dim),
+                    T.ToTensor(),
+                    T.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),  # SigLIP2 uses [-1, 1] normalization
+                ])
+                self.image_transforms_no_crop = T.Compose([
+                    T.Resize((resize_dim, resize_dim), interpolation=T.InterpolationMode.BICUBIC),
+                    T.ToTensor(),
+                    T.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
+                ])
+                
+                # Extract patch size from config for coordinate mapping
+                patch_size_override = siglip2_config.get('patch_size', None)
+                if patch_size_override is not None:
+                    self.patch_size = patch_size_override
+                else:
+                    # Get from loaded config
+                    self.patch_size = siglip2_config_dict.get('vision', {}).get('patch_size', 16)
+
             else:
                 raise Exception("Model family unsupported")
         else:
@@ -642,6 +724,9 @@ class Patchioner(nn.Module):
         elif alphaclip_config is not None:
             self.backbone_type = 'AlphaClip'
             self.alphaclip_config = alphaclip_config.copy()  # Store config for later use
+        elif siglip2_config is not None:
+            self.backbone_type = 'SigLIP2'
+            self.siglip2_config = siglip2_config.copy()  # Store config for later use
         elif use_open_clip and dino_model is not None:
             self.backbone_type = 'OpenCLIP'
         elif dino_model is not None:
@@ -662,6 +747,52 @@ class Patchioner(nn.Module):
             self.dino = None
 
 
+    def aggregate_patches(self, patch_embeddings, weights=None):
+        """
+        Aggregate patch embeddings using GroupNet if available, otherwise use weighted mean.
+        
+        Args:
+            patch_embeddings: Tensor of shape (batch_size, num_patches_height, num_patches_width, embed_dim)
+                            or (batch_size, num_patches, embed_dim)
+            weights: Optional tensor of weights for mean aggregation, shape matching spatial dims of patches
+                    Only used if GroupNet is not available
+        
+        Returns:
+            Aggregated embeddings of shape (batch_size, embed_dim)
+        """
+        if self.groupnet is not None:
+            # Reshape to (batch_size, num_patches, embed_dim) if needed
+            original_shape = patch_embeddings.shape
+            if len(original_shape) == 4:
+                # Shape is (batch_size, height, width, embed_dim)
+                bs, h, w, embed_dim = original_shape
+                patch_embeddings = patch_embeddings.view(bs, h * w, embed_dim)
+            
+            # Use GroupNet for aggregation
+            with torch.no_grad() if not self.training else torch.enable_grad():
+                aggregated = self.groupnet(patch_embeddings)
+            
+            return aggregated
+        else:
+            # Fallback to weighted mean aggregation
+            if weights is not None:
+                # Apply weights and sum
+                if len(patch_embeddings.shape) == 4:
+                    # weights should be (batch_size, height, width)
+                    weighted = patch_embeddings * weights.unsqueeze(-1)
+                    aggregated = weighted.sum(dim=(1, 2))
+                else:
+                    # weights should be (batch_size, num_patches)
+                    weighted = patch_embeddings * weights.unsqueeze(-1)
+                    aggregated = weighted.sum(dim=1)
+            else:
+                # Simple mean
+                if len(patch_embeddings.shape) == 4:
+                    aggregated = patch_embeddings.mean(dim=(1, 2))
+                else:
+                    aggregated = patch_embeddings.mean(dim=1)
+            
+            return aggregated
 
     @classmethod
     def from_config(cls, config, device='cpu', online_texts=None):
@@ -684,6 +815,7 @@ class Patchioner(nn.Module):
         model = cls(
             projection_type=config.get('projection_type', 'coco'),
             decoder_weights=config.get('decap_weights', None),
+            decoder_config=config.get('decoder_config', None),
             device=device,
             prefix_size=config['prefix_size'],
             linear_talk2dino=config.get('linear_talk2dino', False),
@@ -708,8 +840,11 @@ class Patchioner(nn.Module):
             invite_config=config.get('invite_config', None),
             denseclip_config=config.get('denseclip_config', None),
             alphaclip_config=config.get('alphaclip_config', None),
+            siglip2_config=config.get('siglip2_config', None),
             clipcap_config=config.get('clipcap', None),
             hf_repo_id=config.get('hf_repo_id', None),
+            aggregation_config=config.get('aggregation_config', None),
+            diffusion_bridge_config=config.get('diffusion_bridge_config', None),
         )
         model.to(device)
         return model
@@ -844,6 +979,23 @@ class Patchioner(nn.Module):
                 # If output format is different, handle accordingly
                 # This might need adjustment based on actual DenseClip output format
                 raise ValueError(f"Unexpected DenseClip output format: {output.shape if hasattr(output, 'shape') else type(output)}")
+        
+        elif self.backbone_type == 'SigLIP2':
+            # SigLIP2 ViT case
+            from src.siglip2.loader import siglip2_vision_forward_with_patches
+            
+            # Use the wrapper function to get patches
+            cls_token, output_patches = siglip2_vision_forward_with_patches(self.dino, imgs, 
+                                                                            return_patches=True,
+                                                                            project_patches_using_mlp=self.siglip2_config.get('project_patches_using_mlp', False),
+                                                                            project_patches_using_attention_pooling_head_to_each_patch=self.siglip2_config.get('project_patches_using_attention_pooling_head_to_each_patch', False))
+            
+            # Output is [batch_size, num_tokens, embed_dim]
+            # First token is CLS, rest are patch tokens
+            dino_outs = {
+                'x_norm_clstoken': cls_token,      # CLS token
+                'x_norm_patchtokens': output_patches,  # Patch tokens
+            }
             
         elif self.backbone_type == 'OpenCLIP':
             # Using open_clip interface
@@ -980,7 +1132,46 @@ class Patchioner(nn.Module):
         if bboxes is not None and not get_controllable_capts:
             bbox_bs = bs * bs_factor
             n_boxes = bboxes.shape[1]
-            if double_DINO_for_bboxes:
+            
+            # Use GroupNet for bbox aggregation if available
+            if self.groupnet is not None and not double_DINO_for_bboxes:
+                # Extract patches without aggregation using GroupNet utilities
+                from .groupnet.utils import extract_bbox_patches
+                
+                # Extract raw patches for each bbox
+                bbox_patches, bbox_mask = extract_bbox_patches(
+                    dino_outs['x_norm_patchtokens'],
+                    bboxes,
+                    patch_size=self.patch_size,
+                    return_mask=True
+                )
+                # bbox_patches shape: (batch_size, num_boxes, max_patches_per_bbox, embed_dim)
+                # bbox_mask shape: (batch_size, num_boxes, max_patches_per_bbox) - True for padding
+                
+                # Reshape for batch processing: (batch_size * num_boxes, max_patches_per_bbox, embed_dim)
+                bbox_patches_flat = bbox_patches.view(-1, bbox_patches.shape[2], embed_dim)
+                bbox_mask_flat = bbox_mask.view(-1, bbox_mask.shape[2])
+                
+                # Aggregate using GroupNet in batches
+                bbox_feats_list = []
+                n_batch = math.ceil(bbox_patches_flat.shape[0] / bbox_bs)
+                for i in range(n_batch):
+                    start = i * bbox_bs
+                    end = min(start + bbox_bs, bbox_patches_flat.shape[0])
+                    
+                    batch_patches = bbox_patches_flat[start:end]
+                    batch_mask = bbox_mask_flat[start:end]
+                    
+                    # Aggregate with GroupNet
+                    with torch.no_grad() if not self.training else torch.enable_grad():
+                        batch_feats = self.groupnet(batch_patches, mask=batch_mask)
+                    
+                    bbox_feats_list.append(batch_feats)
+                
+                bbox_feats = torch.cat(bbox_feats_list, dim=0)
+                
+            elif double_DINO_for_bboxes:
+                # Use the original double DINO approach
                 outs_layer_n = transform_to_standard_dino_out(feats['intermediate_output'], self.dino)
                 if double_DINO_use_cls:
                     cls_layer_n = outs_layer_n['x_norm_clstoken']
@@ -989,15 +1180,17 @@ class Patchioner(nn.Module):
                     cls_layer_n = None
                     registers_layer_n = None
                 patches_layer_n = outs_layer_n['x_norm_patchtokens']
-                bbox_feats = extract_bboxes_feats_double_dino(self.dino, patches_layer_n, bboxes, cls_layer_n, registers_layer_n, self.patch_size, return_type=double_DINO_for_bboxes_return_type, gaussian_bbox_variance=gaussian_bbox_variance)#.view(-1, self.embed_dim)
+                bbox_feats = extract_bboxes_feats_double_dino(self.dino, patches_layer_n, bboxes, cls_layer_n, registers_layer_n, self.patch_size, return_type=double_DINO_for_bboxes_return_type, gaussian_bbox_variance=gaussian_bbox_variance)
+                bbox_feats = bbox_feats.view(-1, embed_dim)
             else:
+                # Use the original gaussian/mean aggregation approach
                 bbox_attn_maps = self_attn.cpu() if (use_attn_map_for_bboxes and has_attention) else None
                 bbox_feats = extract_bboxes_feats(dino_outs['x_norm_patchtokens'], bboxes, gaussian_avg=gaussian_avg, 
                                                   gaussian_bbox_variance=gaussian_bbox_variance,
-                                                  patch_size=self.patch_size, attention_map=bbox_attn_maps)#.view(-1, self.embed_dim)
+                                                  patch_size=self.patch_size, attention_map=bbox_attn_maps)
+                bbox_feats = bbox_feats.view(-1, embed_dim)
 
-
-            bbox_feats = bbox_feats.view(-1, embed_dim)
+            # Caption the bbox features
             n_batch = math.ceil(bbox_feats.shape[0] / bbox_bs)
             outs['bbox_capts'] = []
             if compute_scores is True:
@@ -1040,9 +1233,41 @@ class Patchioner(nn.Module):
             if return_n_best_sims is not None:
                 outs['bbox_sims'] = [outs['bbox_sims'][i * n_boxes:(i + 1) * n_boxes] for i in range(bs)]
         elif bboxes is not None and get_controllable_capts and self.backbone_type != 'AlphaClip':
-            bbox_attn_maps = self_attn.cpu() if (use_attn_map_for_bboxes and has_attention) else None
             n_boxes = bboxes.shape[1]
-            bbox_feats = extract_bboxes_feats(dino_outs['x_norm_patchtokens'], bboxes, gaussian_avg=gaussian_avg, gaussian_bbox_variance=gaussian_bbox_variance, get_single_embedding_per_image=True, patch_size=self.patch_size, attention_map=bbox_attn_maps)
+            
+            # Use GroupNet for controllable captioning if available
+            if self.groupnet is not None:
+                # Extract patches for all bboxes across the image
+                from .groupnet.utils import extract_bbox_patches
+                
+                bbox_patches, bbox_mask = extract_bbox_patches(
+                    dino_outs['x_norm_patchtokens'],
+                    bboxes,
+                    patch_size=self.patch_size,
+                    return_mask=True
+                )
+                # bbox_patches shape: (batch_size, num_boxes, max_patches_per_bbox, embed_dim)
+                
+                # For controllable captioning, we need to aggregate all bbox patches together per image
+                # Flatten across boxes dimension: (batch_size, num_boxes * max_patches_per_bbox, embed_dim)
+                bs_ctrl = bbox_patches.shape[0]
+                num_boxes_ctrl = bbox_patches.shape[1]
+                max_patches = bbox_patches.shape[2]
+                
+                # Reshape to combine all patches from all boxes
+                all_bbox_patches = bbox_patches.view(bs_ctrl, num_boxes_ctrl * max_patches, embed_dim)
+                all_bbox_mask = bbox_mask.view(bs_ctrl, num_boxes_ctrl * max_patches)
+                
+                # Aggregate using GroupNet
+                with torch.no_grad() if not self.training else torch.enable_grad():
+                    bbox_feats = self.groupnet(all_bbox_patches, mask=all_bbox_mask)
+            else:
+                # Use the original gaussian/mean aggregation approach
+                bbox_attn_maps = self_attn.cpu() if (use_attn_map_for_bboxes and has_attention) else None
+                bbox_feats = extract_bboxes_feats(dino_outs['x_norm_patchtokens'], bboxes, gaussian_avg=gaussian_avg, 
+                                                  gaussian_bbox_variance=gaussian_bbox_variance, 
+                                                  get_single_embedding_per_image=True, 
+                                                  patch_size=self.patch_size, attention_map=bbox_attn_maps)
             
             outs['set_controllable_capts'] = self.caption_tokens(bbox_feats)
         
@@ -1051,7 +1276,50 @@ class Patchioner(nn.Module):
             relevant_patches = torch.stack([map_traces_to_grid(trace, n_patches) for trace in traces], dim=0).to(next(self.parameters()).device)
             if use_attention_tracing and has_attention:
                 relevant_patches = (self_attn.view(relevant_patches.shape) * relevant_patches)
-            trace_embeds = (relevant_patches.unsqueeze(-1) * dino_outs['x_norm_patchtokens'].view(bs, n_patches, n_patches, embed_dim)).mean(dim=(1,2))
+            
+            # Note: relevant_patches can have shape [num_traces, n_patches, n_patches]
+            # where num_traces might not equal bs if multiple traces per image
+            num_traces = relevant_patches.shape[0]
+            
+            if self.groupnet is not None:
+                # For GroupNet: process each trace separately
+                trace_embeds_list = []
+                
+                for trace_idx in range(num_traces):
+                    # Determine which image this trace belongs to
+                    # Assuming traces are distributed evenly across batch (or all from first image)
+                    img_idx = trace_idx if num_traces == bs else 0
+                    
+                    # Get patches for this image
+                    img_patches = dino_outs['x_norm_patchtokens'][img_idx:img_idx+1]  # [1, n_patches^2, embed_dim]
+                    
+                    # Get the trace mask for this specific trace
+                    trace_mask_2d = relevant_patches[trace_idx]  # [n_patches, n_patches]
+                    
+                    # Flatten the mask
+                    trace_mask = trace_mask_2d.view(n_patches * n_patches)  # [n_patches^2]
+                    
+                    # Create GroupNet mask (True = ignore, False = keep)
+                    groupnet_mask = (trace_mask == 0.0).unsqueeze(0)  # [1, n_patches^2]
+                    
+                    # Aggregate using GroupNet with masking
+                    trace_embed = self.groupnet(img_patches, mask=groupnet_mask)  # [1, embed_dim]
+                    trace_embeds_list.append(trace_embed)
+                
+                # Stack results
+                trace_embeds = torch.cat(trace_embeds_list, dim=0)  # [num_traces, embed_dim]
+            else:
+                # Fallback to weighted mean aggregation
+                # Handle case where num_traces != bs by replicating patches
+                if num_traces != bs:
+                    # Replicate patches for each trace (assuming all traces from first image)
+                    patches_expanded = dino_outs['x_norm_patchtokens'][0:1].expand(num_traces, -1, -1)
+                    patches_reshaped = patches_expanded.view(num_traces, n_patches, n_patches, embed_dim)
+                else:
+                    patches_reshaped = dino_outs['x_norm_patchtokens'].view(bs, n_patches, n_patches, embed_dim)
+                
+                weighted_patches = relevant_patches.unsqueeze(-1) * patches_reshaped
+                trace_embeds = weighted_patches.mean(dim=(1, 2))
             
             outs['trace_capts'] = self.caption_tokens(trace_embeds)
 
@@ -1397,6 +1665,12 @@ class Patchioner(nn.Module):
             outs = self.viecap.forward(dino_tokens, compute_scores=compute_scores)
             return outs
         
+        if hasattr(self, 'diffusion_bridge_captioner') and self.diffusion_bridge_captioner is not None:
+            if return_n_best_sims:
+                raise Exception("return_n_best_sims is not supported with diffusion_bridge_captioner")
+            outs = self.diffusion_bridge_captioner.forward(dino_tokens, compute_scores=compute_scores)
+            return outs
+        
         if self.clipcap is not None:
             if return_n_best_sims:
                 raise Exception("return_n_best_sims is not supported with clipcap")
@@ -1415,12 +1689,50 @@ class Patchioner(nn.Module):
                 projected_outs = self.im_proj.project(dino_tokens, normalize=self.normalize)
             else:
                 projected_outs = dino_tokens
-            outs = decoding_batched(self.decoder, projected_outs, compute_scores=compute_scores, decoding_method=self.decoding_method)
+                if self.normalize:
+                    projected_outs = F.normalize(projected_outs, p=2, dim=-1)
+            outs = decoding_batched(self.decoder, projected_outs, compute_scores=compute_scores, decoding_method=self.decoding_method, tokenizer=self._get_decoder_tokenizer(), decoder_family=self.decoder_config.get('decoder_family', None) if self.decoder_config else None)
         else:
             # DINOv2 embedding inversion
             clip_tokens = revert_transformation(self.im_proj.project(dino_tokens, normalize=self.normalize), A_pinv=self.talk2dino_A_pinv, b=self.talk2dino_b)
-            outs = decoding_batched(self.decoder, clip_tokens, compute_scores=compute_scores, decoding_method=self.decoding_method)
+            outs = decoding_batched(self.decoder, clip_tokens, compute_scores=compute_scores, decoding_method=self.decoding_method, tokenizer=self._get_decoder_tokenizer(), decoder_family=self.decoder_config.get('decoder_family', None) if self.decoder_config else None)
         return outs
+
+    
+    def _get_decoder_tokenizer(self):
+
+        if hasattr(self, '_tokenizer') and self._tokenizer is not None:
+            return self._tokenizer
+
+        decoder_family = self.decoder_config.get('decoder_family', None) if hasattr(self, 'decoder_config') and self.decoder_config is not None else None
+        
+        if decoder_family in ['qwen3', 'llama', 'gemma3', 'openelm']:
+            if 'decoder_model_id':
+                decoder_model_id = self.decoder_config['decoder_model_id']
+            else:
+                print("Decoder config does not have model_id, using default Qwen/Qwen3-0.6B")
+                print(f"Available items from decoder_config: {self.decoder_config.items()}")
+                decoder_model_id = 'Qwen/Qwen3-0.6B'
+            print(f"Using decoder model {decoder_model_id}")
+            from transformers import AutoTokenizer
+
+            if decoder_family == 'openelm':
+                print("Loading decoder tokenizer for OpenELM model as meta-llama/Llama-2-7b-hf")
+                decoder_model_id = 'meta-llama/Llama-2-7b-hf'
+            
+            decoder_tokenizer = AutoTokenizer.from_pretrained(
+                decoder_model_id,
+                trust_remote_code=True
+            )
+            self._tokenizer = decoder_tokenizer
+            return self._tokenizer
+        elif decoder_family in ['gpt2', None]:
+            # in this case we use the openai clip tokenizer
+            from .clip.simple_tokenizer import SimpleTokenizer
+            self._tokenizer = SimpleTokenizer()
+            return self._tokenizer
+        else:
+            raise ValueError(f"Decoder family {decoder_family} not supported for tokenizer retrieval.")
 
     def ctx_cleaner(self, dirty_embeds : torch.Tensor, ctx_embed : torch.Tensor, cleaning_type='orthogonal_projection', alpha=1.0, epsilon=1e-6):
         if cleaning_type == 'orthogonal_projection':
