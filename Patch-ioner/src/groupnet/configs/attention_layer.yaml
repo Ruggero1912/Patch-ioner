@@ -1,0 +1,18 @@
+# GroupNet Attention Layer Configuration
+# Single-layer attention-based aggregation with learnable CLS token
+
+# Model architecture type: 'attention', 'transformer', or 'set_transformer'
+model_type: attention
+
+# Embedding dimension (must match your backbone model)
+# Common values: 384 (ViT-S), 512 (CLIP ViT-B), 768 (ViT-B), 1024 (ViT-L), 1536 (ViT-G)
+embed_dim: 768
+
+# Number of attention heads
+num_heads: 8
+
+# Dropout probability
+dropout: 0.1
+
+# Whether to use a learnable CLS token (True) or self-attention + mean pooling (False)
+use_cls_token: true

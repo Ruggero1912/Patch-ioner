@@ -1,0 +1,32 @@
+# GroupNet Transformer Aggregator Configuration
+# Multi-layer transformer encoder with learned CLS token
+
+# Model architecture type: 'attention', 'transformer', or 'set_transformer'
+model_type: transformer
+
+# Embedding dimension (must match your backbone model)
+# Common values: 384 (ViT-S), 512 (CLIP ViT-B), 768 (ViT-B), 1024 (ViT-L), 1536 (ViT-G)
+embed_dim: 768
+
+# Number of attention heads
+num_heads: 8
+
+# Number of transformer encoder layers
+num_layers: 3
+
+# Dimension of feedforward network in transformer layers
+dim_feedforward: 2048
+
+# Dropout probability
+dropout: 0.1
+
+# Whether to use a learnable CLS token (True) or mean pooling after transformer (False)
+use_cls_token: true
+
+# Type of positional encoding: 'none', 'learned', or 'sinusoidal'
+# Current implementation treats patches as unordered set (use 'none')
+# TODO: Implement spatial positional encoding that preserves patch positions within bboxes
+positional_encoding: none
+
+# Maximum sequence length (for learned/sinusoidal positional encoding)
+max_seq_len: 512

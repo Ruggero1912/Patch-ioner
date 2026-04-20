@@ -1,0 +1,35 @@
+# GroupNet Set Transformer Configuration
+# Set-based aggregation using Inducing Points and Pooling by Multihead Attention
+# Based on "Set Transformer" (Lee et al., ICML 2019)
+
+# Model architecture type: 'attention', 'transformer', or 'set_transformer'
+model_type: set_transformer
+
+# Embedding dimension (must match your backbone model)
+# Common values: 384 (ViT-S), 512 (CLIP ViT-B), 768 (ViT-B), 1024 (ViT-L), 1536 (ViT-G)
+embed_dim: 768
+
+# Number of attention heads
+num_heads: 8
+
+# Number of Set Attention Block (SAB) or Induced SAB (ISAB) layers
+num_layers: 3
+
+# Number of inducing points for ISAB (reduces complexity from O(n^2) to O(mn))
+# Higher values = more expressive but slower
+num_inducing_points: 32
+
+# Number of seed vectors for Pooling by Multihead Attention (PMA)
+# 1 = single aggregated output, >1 = multiple aggregated outputs
+# TODO: Make this configurable for different use cases
+num_seed_vectors: 1
+
+# Dimension of feedforward network in MAB blocks
+dim_feedforward: 2048
+
+# Dropout probability
+dropout: 0.1
+
+# Whether to use Induced Set Attention Block (ISAB)
+# True = more efficient for large sets, False = standard Set Attention Block (SAB)
+use_isab: true

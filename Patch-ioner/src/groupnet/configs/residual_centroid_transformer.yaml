@@ -1,0 +1,42 @@
+# GroupNet Residual-Centroid Configuration with Transformer Branch
+# Two-branch model: centroid (mean) + learned residual using multi-layer transformer
+
+# Model architecture type
+model_type: residual_centroid
+
+# Embedding dimension (must match your backbone model)
+# Common values: 384 (ViT-S), 512 (CLIP ViT-B), 768 (ViT-B), 1024 (ViT-L), 1536 (ViT-G)
+embed_dim: 768
+
+# Type of model for the residual branch
+# Options: 'attention', 'transformer', 'set_transformer'
+residual_model_type: transformer
+
+# Configuration for the residual branch
+residual_config:
+  # Number of attention heads
+  num_heads: 8
+  
+  # Number of transformer layers
+  num_layers: 3
+  
+  # Dimension of feedforward network
+  dim_feedforward: 2048
+  
+  # Dropout probability
+  dropout: 0.1
+  
+  # Whether to use a learnable CLS token (True) or mean pooling (False)
+  use_cls_token: true
+  
+  # Type of positional encoding: 'none', 'learned', or 'sinusoidal'
+  positional_encoding: none
+  
+  # Maximum sequence length for learned positional encoding
+  max_seq_len: 512
+
+# Training notes:
+# - The residual branch is initialized to output zeros at the start of training
+# - This means the model initially predicts exactly the centroid (mean)
+# - During training, the residual branch learns corrections to improve over the centroid baseline
+# - The final output is: centroid + residual
