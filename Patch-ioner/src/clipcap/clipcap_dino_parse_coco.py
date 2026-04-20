@@ -202,7 +202,7 @@ def load_text_encoder(text_encoder_path, device, config_path=None):
             talk2dino.eval()
             
             # Load CLIP model for text encoding
-            clip_model, _ = clip.load("ViT-B/32", device=device)
+            clip_model, _ = clip.load("ViT-B/16", device=device)
             clip_model.eval()
             
             return {
@@ -243,7 +243,7 @@ def encode_caption(caption, text_encoder, device):
         # Use DINO.txt pipeline: tokenize + encode + extract patch-aligned features
         with torch.no_grad():
             # Tokenize with DINO.txt tokenizer
-            text_tokens = text_encoder['tokenizer'].tokenize([caption]).to(device)
+            text_tokens = text_encoder['tokenizer'].tokenize([caption], truncate=True).to(device)
             
             # Encode with DINO.txt model
             dinotxt_features = text_encoder['model'].encode_text(text_tokens)
@@ -260,7 +260,7 @@ def encode_caption(caption, text_encoder, device):
         # Use Talk2Dino pipeline: CLIP text encoding + Talk2Dino projection
         with torch.no_grad():
             # Tokenize and encode with CLIP
-            text_tokens = clip.tokenize([caption]).to(device)
+            text_tokens = clip.tokenize([caption], truncate=True).to(device)
             clip_text_features = text_encoder['clip_model'].encode_text(text_tokens)
             
             # Project through Talk2Dino to DINO space
@@ -273,7 +273,7 @@ def encode_caption(caption, text_encoder, device):
     elif text_encoder['type'] == 'clip':
         # Use CLIP directly
         with torch.no_grad():
-            text_tokens = clip.tokenize([caption]).to(device)
+            text_tokens = clip.tokenize([caption], truncate=True).to(device)
             clip_text_features = text_encoder['clip_model'].encode_text(text_tokens)
             
             # Normalize the features
