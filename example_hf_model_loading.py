@@ -5,7 +5,7 @@ import torch
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-config_name = "Ruggero1912/Patch-ioner_talk2dino_viecap_COCO_Captions"
+config_name = "Ruggero1912/Patch-ioner_talk2dino_capdec_groupnet_COCO_Captions"
 # "./configs_public/talk2dino_decap_COCO_Captions.yaml"
 model = Patchioner.from_config(config_name, device=device)
 

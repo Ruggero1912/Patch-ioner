@@ -458,44 +458,25 @@ class MAB(nn.Module):
 
 
 class ResidualCentroidGroupNet(nn.Module):
-    """
-    Two-branch GroupNet model that combines:
-    1. Centroid branch: Computes the mean of patch embeddings (baseline)
-    2. Residual branch: Learns to compute residuals to add to the centroid
-    
-    The residual branch is initialized to output zeros at training start,
-    so the initial prediction equals the centroid. During training, the residual
-    branch learns to improve over this baseline.
-    
-    Args:
-        embed_dim: Dimension of input embeddings
-        residual_model_type: Type of model for residual branch ('attention', 'transformer', or 'set_transformer')
-        residual_config: Configuration dict for the residual branch model
-    """
-    
     def __init__(
         self,
         embed_dim: int,
         residual_model_type: str = 'attention',
         residual_config: Optional[Dict[str, Any]] = None,
+        gate_init_logit: float = -2.0,   # sigmoid(-8) ~ 0.0003
+        gate_type: str = "global",       # "global" | "per_sample" | "per_dim"
     ):
         super().__init__()
-        
         self.embed_dim = embed_dim
         self.residual_model_type = residual_model_type
-        
-        # Default config for residual branch if not provided
+        self.gate_type = gate_type
+
         if residual_config is None:
-            residual_config = {
-                'embed_dim': embed_dim,
-                'num_heads': 8,
-                'dropout': 0.1,
-            }
+            residual_config = {'embed_dim': embed_dim, 'num_heads': 8, 'dropout': 0.1}
         else:
-            # Ensure embed_dim is set correctly
             residual_config['embed_dim'] = embed_dim
-        
-        # Build residual branch
+
+        # --- build residual branch (same as yours) ---
         if residual_model_type == 'attention':
             self.residual_branch = AttentionLayer(
                 embed_dim=embed_dim,
@@ -526,11 +507,49 @@ class ResidualCentroidGroupNet(nn.Module):
                 use_isab=residual_config.get('use_isab', True),
             )
         else:
-            raise ValueError(f"Unknown residual model type: {residual_model_type}. "
-                           f"Choose from 'attention', 'transformer', or 'set_transformer'.")
-        
-        # Initialize residual branch to output zeros
-        self._initialize_residual_to_zero()
+            raise ValueError(f"Unknown residual model type: {residual_model_type}")
+
+        # --- gate params ---
+        if gate_type == "global":
+            self.gate_logit = nn.Parameter(torch.tensor(gate_init_logit))
+        elif gate_type == "per_dim":
+            self.gate_logit = nn.Parameter(torch.full((embed_dim,), gate_init_logit))
+        elif gate_type == "per_sample":
+            # make gate from centroid (one scalar per sample)
+            self.gate_mlp = nn.Linear(embed_dim, 1)
+            nn.init.zeros_(self.gate_mlp.weight)
+            nn.init.constant_(self.gate_mlp.bias, gate_init_logit)
+        else:
+            raise ValueError("gate_type must be: global | per_dim | per_sample")
+
+    def compute_centroid(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        if mask is not None:
+            mask_expanded = (~mask).float().unsqueeze(-1)
+            centroid = (x * mask_expanded).sum(dim=1) / (mask_expanded.sum(dim=1) + 1e-8)
+        else:
+            centroid = x.mean(dim=1)
+        return centroid
+
+    def _compute_gate(self, centroid: torch.Tensor) -> torch.Tensor:
+        if self.gate_type == "global":
+            g = torch.sigmoid(self.gate_logit)              # scalar
+            return g
+        if self.gate_type == "per_dim":
+            g = torch.sigmoid(self.gate_logit)              # (D,)
+            return g
+        # per_sample
+        g = torch.sigmoid(self.gate_mlp(centroid))          # (B,1)
+        return g
+
+    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        centroid = self.compute_centroid(x, mask)           # (B,D)
+        residual = self.residual_branch(x, mask)            # (B,D)
+
+        g = self._compute_gate(centroid)
+
+        # broadcast works for scalar, (D,), or (B,1)
+        out = centroid + g * residual
+        return out
     
     def _initialize_residual_to_zero(self):
         """
@@ -564,51 +583,6 @@ class ResidualCentroidGroupNet(nn.Module):
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
     
-    def compute_centroid(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        """
-        Compute the centroid (mean) of patch embeddings.
-        
-        Args:
-            x: Input patch embeddings of shape (batch_size, num_patches, embed_dim)
-            mask: Optional mask of shape (batch_size, num_patches)
-                  True values indicate positions to mask out
-        
-        Returns:
-            Centroid of shape (batch_size, embed_dim)
-        """
-        if mask is not None:
-            # Masked mean: only average over non-masked patches
-            mask_expanded = (~mask).float().unsqueeze(-1)  # (bs, num_patches, 1)
-            centroid = (x * mask_expanded).sum(dim=1) / (mask_expanded.sum(dim=1) + 1e-8)
-        else:
-            # Simple mean over all patches
-            centroid = x.mean(dim=1)
-        
-        return centroid  # (batch_size, embed_dim)
-    
-    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        """
-        Forward pass: centroid + residual
-        
-        Args:
-            x: Input patch embeddings of shape (batch_size, num_patches, embed_dim)
-            mask: Optional attention mask of shape (batch_size, num_patches)
-                  True values indicate positions to mask out
-        
-        Returns:
-            Aggregated embedding of shape (batch_size, embed_dim)
-        """
-        # Branch 1: Compute centroid (no gradients needed, but we keep it differentiable)
-        centroid = self.compute_centroid(x, mask)
-        
-        # Branch 2: Compute residuals
-        residual = self.residual_branch(x, mask)
-        
-        # Combine: output = centroid + residual
-        output = centroid + residual
-        
-        return output
-
 
 class GroupNet(nn.Module):
     """

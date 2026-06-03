@@ -99,7 +99,7 @@ class Patchioner(nn.Module):
                  dino_model=None, proxyclip_clipmodel=None, proxyclip_vfm=None, use_talk2dino_project=True, normalize=True, attention_type='qkv', talk2dino_config=None, 
                  talk2dino_weights=None, resize_dim=518, crop_dim=518, talk2dino_attn_type='qkv', calculate_argmax_text=False,
                  online_texts=None, clip_model_name=None, use_open_clip=False, viecap_config=None, regionclip_config=None, invite_config=None, denseclip_config=None, alphaclip_config=None, siglip2_config=None, clipcap_config=None, hf_repo_id=None, decoder_config=None,
-                 aggregation_config=None, diffusion_bridge_config=None,
+                 aggregation_config=None, ifcap_config=None, diffusion_bridge_config=None,
                  **kwargs):
         super().__init__(**kwargs)
 
@@ -107,6 +107,12 @@ class Patchioner(nn.Module):
 
         self.decoder_config = decoder_config
 
+        
+        if ifcap_config is not None:
+            from .ifcap.src.entrypoint import IFCap
+            self.ifcap = IFCap.from_config(ifcap_config).to(device)
+        else:
+            self.ifcap = None
         if viecap_config is not None:
             if viecap_config.get('meacap', False):
                 from .meacap.entrypoint import MeaCap
@@ -120,6 +126,8 @@ class Patchioner(nn.Module):
         if diffusion_bridge_config is not None:
             from .diffusionbridge.entrypoint import DiffusionBridgeCaptioner
             self.diffusion_bridge_captioner = DiffusionBridgeCaptioner.from_config(diffusion_bridge_config, device)
+        else:
+            self.diffusion_bridge_captioner = None
 
         if clipcap_config is not None:
             # Determine DINO feature dimension based on model type
@@ -842,6 +850,7 @@ class Patchioner(nn.Module):
             alphaclip_config=config.get('alphaclip_config', None),
             siglip2_config=config.get('siglip2_config', None),
             clipcap_config=config.get('clipcap', None),
+            ifcap_config=config.get('ifcap', None),
             hf_repo_id=config.get('hf_repo_id', None),
             aggregation_config=config.get('aggregation_config', None),
             diffusion_bridge_config=config.get('diffusion_bridge_config', None),
@@ -1658,7 +1667,12 @@ class Patchioner(nn.Module):
         return ret
 
     def caption_tokens(self, dino_tokens, project=True, return_n_best_sims=None, compute_scores : bool = False):
-        
+        if self.ifcap is not None:
+            if return_n_best_sims:
+                raise Exception("return_n_best_sims is not supported with ifcap")
+            outs = self.ifcap.forward(dino_tokens, compute_scores=compute_scores)
+            return outs   
+           
         if self.viecap is not None:
             if return_n_best_sims:
                 raise Exception("return_n_best_sims is not supported with viecap")
