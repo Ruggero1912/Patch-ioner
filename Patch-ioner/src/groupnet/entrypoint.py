@@ -172,7 +172,6 @@ def _load_weights_from_huggingface(
         
         # Download from HuggingFace
         weights_path = get_model_path_with_hf_fallback(
-            model_name=hf_repo_id,
             hf_repo_id=hf_repo_id,
             filename=weights_filename
         )
