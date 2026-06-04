@@ -26,7 +26,7 @@ packages = ["patchioner", "patchioner.decap",
 package-dir = { "patchioner" = "Patch-ioner/src" }
 
 [tool.setuptools.package-data]
-patchioner = ["proxyclip/open_clip_proxy/*.gz", "decap/decoder_config.pkl", "viecap/vocabulary/*", "clip/*.gz"]
+patchioner = ["proxyclip/open_clip_proxy/*.gz", "decap/decoder_config.pkl", "viecap/vocabulary/*", "clip/*.gz", "groupnet/configs/*"]
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
