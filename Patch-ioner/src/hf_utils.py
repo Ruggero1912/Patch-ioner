@@ -15,7 +15,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def get_model_path_with_hf_fallback(local_path: str,
+def get_model_path_with_hf_fallback(local_path: str = None,
     hf_repo_id: Optional[str] = None,
     filename: Optional[str] = None,
     cache_dir: Optional[str] = None
@@ -34,7 +34,7 @@ def get_model_path_with_hf_fallback(local_path: str,
         Exception: If download fails
     """
     # Try to use the local path if it exists
-    if os.path.exists(local_path):
+    if local_path is not None and os.path.exists(local_path):
         logger.info(f"Using local model path: {local_path}")
         return local_path
 
