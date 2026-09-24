@@ -9,7 +9,7 @@ import random
 import torchvision.transforms as T
 
 
-from .decap.decap import decoding_batched, DeCap, MLP
+from .decap.decap import decoding_batched, decoding_beam_search, DeCap, MLP
 from .decap.decap import get_decap_model
 from .dino_extraction import get_self_attention, process_self_attention, transform_to_standard_dino_out, get_layer_n_output, feats
 from .decap.im2txtprojection.im2txtprojection import Im2TxtProjector, ProjectionType
@@ -18,6 +18,7 @@ from .talk2dino.talk2dino import ProjectionLayer
 from .proxyclip.proxyclip import ProxyCLIP
 from transformers import GPT2LMHeadModel
 from .embedding_utils import get_pseudo_inverse, revert_transformation
+from typing import Union, Optional, Dict, Any
 
 
 import math
@@ -100,12 +101,20 @@ class Patchioner(nn.Module):
                  talk2dino_weights=None, resize_dim=518, crop_dim=518, talk2dino_attn_type='qkv', calculate_argmax_text=False,
                  online_texts=None, clip_model_name=None, use_open_clip=False, viecap_config=None, regionclip_config=None, invite_config=None, denseclip_config=None, alphaclip_config=None, siglip2_config=None, clipcap_config=None, hf_repo_id=None, decoder_config=None,
                  aggregation_config=None, ifcap_config=None, diffusion_bridge_config=None,
+                 decoding_strategy=None, beam_search_config=None,
                  **kwargs):
         super().__init__(**kwargs)
 
         self.decoding_method = None
 
         self.decoder_config = decoder_config
+        self.decoding_strategy = decoding_strategy
+        if self.decoding_strategy is None and isinstance(self.decoder_config, dict):
+            self.decoding_strategy = self.decoder_config.get('decoding_strategy', None)
+
+        self.beam_search_config = beam_search_config or {}
+        if not self.beam_search_config and isinstance(self.decoder_config, dict):
+            self.beam_search_config = self.decoder_config.get('beam_search_config', {})
 
         
         if ifcap_config is not None:
@@ -820,6 +829,21 @@ class Patchioner(nn.Module):
                 config_path = get_model_path_with_hf_fallback(config, hf_repo_id=hf_repo_id, filename=config_file)
                 with open(config_path, 'r') as f:
                     config = yaml.safe_load(f)
+        decoding_strategy = config.get('decoding_strategy', None)
+        if decoding_strategy is None and isinstance(config.get('decoder_config'), dict):
+            decoding_strategy = config['decoder_config'].get('decoding_strategy', None)
+
+        beam_search_config = config.get('beam_search_config', None)
+        if beam_search_config is None and isinstance(config.get('decoder_config'), dict):
+            beam_search_config = config['decoder_config'].get('beam_search_config', None)
+        if beam_search_config is None:
+            beam_search_config = {}
+            for k in ['beam_size', 'beam_width', 'length_penalty', 'no_repeat_ngram_size', 'temperature']:
+                if k in config:
+                    beam_search_config[k] = config[k]
+                elif isinstance(config.get('decoder_config'), dict) and k in config['decoder_config']:
+                    beam_search_config[k] = config['decoder_config'][k]
+
         model = cls(
             projection_type=config.get('projection_type', 'coco'),
             decoder_weights=config.get('decap_weights', None),
@@ -854,6 +878,8 @@ class Patchioner(nn.Module):
             hf_repo_id=config.get('hf_repo_id', None),
             aggregation_config=config.get('aggregation_config', None),
             diffusion_bridge_config=config.get('diffusion_bridge_config', None),
+            decoding_strategy=decoding_strategy,
+            beam_search_config=beam_search_config,
         )
         model.to(device)
         return model
@@ -1666,7 +1692,89 @@ class Patchioner(nn.Module):
             ret['bbox_scores'] = scores
         return ret
 
-    def caption_tokens(self, dino_tokens, project=True, return_n_best_sims=None, compute_scores : bool = False):
+    def set_decoding_method(
+        self,
+        method: Union[str, callable] = "greedy",
+        beam_search_config: Optional[dict] = None,
+        **kwargs
+    ):
+        """
+        Configure the decoding method/strategy on the model.
+
+        Allows dynamically switching between greedy decoding (batched) and beam search decoding
+        without needing to reload the model or edit YAML configuration files.
+
+        Args:
+            method (str or callable):
+                - 'greedy' or 'batched': standard greedy decoding (via decoding_batched)
+                - 'beam' or 'beam_search': beam search decoding (via decoding_beam_search)
+                - If callable, updates self.decoding_method directly (e.g. tokenizer.decode)
+            beam_search_config (dict, optional): Dictionary of beam search settings, e.g.:
+                {'beam_size': 5, 'length_penalty': 0.6, 'no_repeat_ngram_size': 3}
+            **kwargs: Extra parameters for beam search or decoding (e.g., beam_size=5, length_penalty=0.6).
+
+        Returns:
+            self: The model instance for method chaining.
+        """
+        if callable(method):
+            self.decoding_method = method
+            return self
+
+        method_str = str(method).lower().strip()
+        if "beam" in method_str:
+            self.decoding_strategy = "beam_search"
+            cfg = {}
+            if isinstance(getattr(self, 'beam_search_config', None), dict):
+                cfg.update(self.beam_search_config)
+            if isinstance(beam_search_config, dict):
+                cfg.update(beam_search_config)
+            cfg.update(kwargs)
+            if "beam_width" in cfg and "beam_size" not in cfg:
+                cfg["beam_size"] = cfg.pop("beam_width")
+            self.beam_search_config = cfg
+        elif method_str in ["greedy", "batched", "batch"] or "greedy" in method_str or "batch" in method_str:
+            self.decoding_strategy = "greedy"
+            self.batched_decoding_config = kwargs
+        else:
+            self.decoding_strategy = method
+            if "beam" in str(method).lower():
+                cfg = self.beam_search_config.copy() if isinstance(getattr(self, 'beam_search_config', None), dict) else {}
+                cfg.update(kwargs)
+                self.beam_search_config = cfg
+            else:
+                self.batched_decoding_config = kwargs
+        return self
+
+    def set_decoding_strategy(self, strategy: str = "greedy", beam_search_config: Optional[dict] = None, **kwargs):
+        """Alias for set_decoding_method."""
+        return self.set_decoding_method(strategy, beam_search_config=beam_search_config, **kwargs)
+
+    def set_greedy_decoding(self, **kwargs):
+        """Configure model to use greedy (batched) decoding."""
+        return self.set_decoding_method("greedy", **kwargs)
+
+    def set_batched_decoding(self, **kwargs):
+        """Configure model to use batched (greedy) decoding."""
+        return self.set_decoding_method("batched", **kwargs)
+
+    def set_beam_search_decoding(
+        self,
+        beam_size: int = 5,
+        length_penalty: float = 0.6,
+        no_repeat_ngram_size: int = 3,
+        **kwargs
+    ):
+        """Configure model to use beam search decoding."""
+        cfg = {
+            "beam_size": beam_size,
+            "length_penalty": length_penalty,
+            "no_repeat_ngram_size": no_repeat_ngram_size,
+        }
+        cfg.update(kwargs)
+        return self.set_decoding_method("beam_search", beam_search_config=cfg)
+
+    def caption_tokens(self, dino_tokens, project=True, return_n_best_sims=None, compute_scores : bool = False,
+                       decoding_strategy=None, beam_search_config=None, **kwargs):
         if self.ifcap is not None:
             if return_n_best_sims:
                 raise Exception("return_n_best_sims is not supported with ifcap")
@@ -1697,6 +1805,27 @@ class Patchioner(nn.Module):
             # if calculate_argmax_text we return the argmax of the similarities between tokens and memory without using the decoder
             captions = self.im_proj.project(dino_tokens, normalize=self.normalize, return_argmax_text=True, return_n_best_sims=return_n_best_sims)
             return captions if compute_scores is False else (captions, [1.0] * len(captions)) # we return a list of 1.0s as scores
+        
+        active_strategy = decoding_strategy if decoding_strategy is not None else getattr(self, 'decoding_strategy', None)
+        use_beam = (
+            active_strategy in ['beam_search', 'beam']
+            or (isinstance(active_strategy, str) and 'beam' in active_strategy.lower())
+        )
+        decoding_fn = decoding_beam_search if use_beam else decoding_batched
+        decoding_kwargs = {}
+        if use_beam:
+            if hasattr(self, 'beam_search_config') and isinstance(self.beam_search_config, dict):
+                decoding_kwargs.update(self.beam_search_config)
+            if isinstance(beam_search_config, dict):
+                decoding_kwargs.update(beam_search_config)
+            decoding_kwargs.update(kwargs)
+            if 'beam_width' in decoding_kwargs and 'beam_size' not in decoding_kwargs:
+                decoding_kwargs['beam_size'] = decoding_kwargs.pop('beam_width')
+        else:
+            if hasattr(self, 'batched_decoding_config') and isinstance(self.batched_decoding_config, dict):
+                decoding_kwargs.update(self.batched_decoding_config)
+            decoding_kwargs.update(kwargs)
+
         if not self.embed_inversion:
             # classical decoder forward
             if project:
@@ -1705,11 +1834,33 @@ class Patchioner(nn.Module):
                 projected_outs = dino_tokens
                 if self.normalize:
                     projected_outs = F.normalize(projected_outs, p=2, dim=-1)
-            outs = decoding_batched(self.decoder, projected_outs, compute_scores=compute_scores, decoding_method=self.decoding_method, tokenizer=self._get_decoder_tokenizer(), decoder_family=self.decoder_config.get('decoder_family', None) if self.decoder_config else None)
+            decoder_family = self.decoder_config.get('decoder_family', None) if self.decoder_config else None
+            outs = decoding_fn(
+                self.decoder,
+                projected_outs,
+                compute_scores=compute_scores,
+                decoding_method=self.decoding_method,
+                tokenizer=self._get_decoder_tokenizer(),
+                decoder_family=decoder_family,
+                **decoding_kwargs,
+            )
         else:
             # DINOv2 embedding inversion
-            clip_tokens = revert_transformation(self.im_proj.project(dino_tokens, normalize=self.normalize), A_pinv=self.talk2dino_A_pinv, b=self.talk2dino_b)
-            outs = decoding_batched(self.decoder, clip_tokens, compute_scores=compute_scores, decoding_method=self.decoding_method, tokenizer=self._get_decoder_tokenizer(), decoder_family=self.decoder_config.get('decoder_family', None) if self.decoder_config else None)
+            clip_tokens = revert_transformation(
+                self.im_proj.project(dino_tokens, normalize=self.normalize),
+                A_pinv=self.talk2dino_A_pinv,
+                b=self.talk2dino_b,
+            )
+            decoder_family = self.decoder_config.get('decoder_family', None) if self.decoder_config else None
+            outs = decoding_fn(
+                self.decoder,
+                clip_tokens,
+                compute_scores=compute_scores,
+                decoding_method=self.decoding_method,
+                tokenizer=self._get_decoder_tokenizer(),
+                decoder_family=decoder_family,
+                **decoding_kwargs,
+            )
         return outs
 
     

@@ -1,4 +1,5 @@
 import os
+import math
 from torch import nn
 import numpy as np
 import torch
@@ -421,170 +422,253 @@ def decoding_batched(model, clip_features, compute_scores : bool = False, decodi
     
     return (outputs, final_scores.cpu().float().numpy().tolist()) if compute_scores else outputs
 
-import copy
-
-
-from huggingface_hub import hf_hub_download
-import importlib.util
-
-#file_path = hf_hub_download(
-#    repo_id="transformers-community/group-beam-search", 
-#    filename="custom_generate/generate.py"
-#)
-try:
-    file_path = os.path.join(os.path.dirname(__file__), "group-beam-search", "custom_generate/generate.py")
-    # "custom_generate": os.path.join(os.path.dirname(__file__), "group-beam-search"),
-    spec = importlib.util.spec_from_file_location("remote_gen", file_path)
-    remote_gen_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(remote_gen_module)
-
-    diverse_beam_func = remote_gen_module._group_beam_search
-except:
-    diverse_beam_func = None
 
 @torch.no_grad()
-def decoding_diverse_batched_old(
+def decoding_beam_search(
     model,
     clip_features,
     compute_scores: bool = False,
     decoding_method: callable = None,
     return_start_end_tokens: bool = False,
-    num_candidates: int = 32,
-    diverse_mode: str = "strict",
+    tokenizer=None,
+    decoder_family: Optional[str] = None,
+    eos_token_id: Optional[int] = None,
+    full_stop_token_id=None,
+    beam_size: int = 5,
     entry_length: int = 30,
-    num_beam_groups: int = 8,
-    diversity_penalty: float = 0.5,
-    top_p: float = 0.9,
+    length_penalty: float = 0.6,
+    no_repeat_ngram_size: int = 3,
     temperature: float = 1.0,
+    prevent_eos_at_start: bool = True,
+    min_new_tokens: int = 1,
 ):
     """
-    Batched CLIP-conditioned decoding that returns a diverse pool of candidates.
-
-    This function is compatible with the calling style of decoding_batched and can
-    be used as a drop-in replacement. For each input in the batch it returns
-    `num_candidates` captions (flattened in batch-major order).
-    Modes:
-    - strict: group beam search (deterministic diverse beam search)
-    - sample: beam search + sampling (stochastic diversity)
-    If compute_scores is True, returns (captions, perplexities), where perplexity
-    is computed token-wise on generated sequences conditioned on the CLIP prefix.
-
+    Returns the generated sequences for a batch of clip features using beam search.
+    - beam_size: number of beams (default: 5, standard for captioning)
+    - entry_length: maximum sequence length (default: 30)
+    - length_penalty: exponent for length normalization (default: 0.6)
+    - no_repeat_ngram_size: prevents repeated n-grams in caption (default: 3)
+    - if compute_scores is True, returns (captions, scores), otherwise captions.
+    Works for both GPT-2 based decoders and others (Qwen, LLaMA, Gemma, OpenELM).
     """
+    if beam_size is None or beam_size <= 1:
+        return decoding_batched(
+            model=model,
+            clip_features=clip_features,
+            compute_scores=compute_scores,
+            decoding_method=decoding_method,
+            return_start_end_tokens=return_start_end_tokens,
+            tokenizer=tokenizer,
+            decoder_family=decoder_family,
+            eos_token_id=eos_token_id,
+            full_stop_token_id=full_stop_token_id,
+        )
 
     model.eval()
+    device = clip_features.device
+    model_dtype = next(model.parameters()).dtype
+    prefix_embeds = model.clip_project(clip_features)
+    prefix_embeds = prefix_embeds.view(clip_features.shape[0], 1, -1).to(model_dtype)
+    batch_size = prefix_embeds.shape[0]
+    embedding_layer = model.decoder.get_input_embeddings()
 
-    if num_candidates < 1:
-        raise ValueError("num_candidates must be >= 1")
-
-    if entry_length < 1:
-        raise ValueError("entry_length must be >= 1")
-
-    if diverse_mode not in {"strict", "sample"}:
-        raise ValueError("diverse_mode must be either 'strict' or 'sample'")
-
-    # CLIP tokenizer EOT token used by this project's decoder setup.
-
-    eos_token_id = _Tokenizer.encoder.get("<|endoftext|>", 49407)
-
-    prefix_embeds = model.clip_project(clip_features).view(clip_features.shape[0], 1, -1)
-    bs = prefix_embeds.shape[0]
-
-    # Ensure a valid number of beam groups.
-    num_beam_groups = max(1, min(num_beam_groups, num_candidates))
-
-    while num_candidates % num_beam_groups != 0 and num_beam_groups > 1:
-        num_beam_groups -= 1
-
-    generation_kwargs = {
-        "inputs_embeds": prefix_embeds,
-        "max_new_tokens": entry_length,
-        "num_beams": num_candidates,
-        "num_return_sequences": num_candidates,
-        "eos_token_id": eos_token_id,
-        "pad_token_id": eos_token_id,
-        "return_dict_in_generate": True,
-        "output_scores": False,
-        "early_stopping": True,
-        #"custom_generate": "transformers-community/group-beam-search",
-        #"trust_remote_code": True,
-    }
-
-    if not hasattr(model.decoder, "transformers-community/group-beam-search"):
-        global diverse_beam_func
-        setattr(type(model.decoder), "transformers-community/group-beam-search", diverse_beam_func)
-
-    if diverse_mode == "strict":
-        generation_kwargs.update(
-            {
-                "do_sample": False,
-                "num_beam_groups": num_beam_groups,
-                "diversity_penalty": diversity_penalty,
-                "temperature": 1.0,
-            }
-        )
-
-    else:
-        generation_kwargs.update(
-            {
-                "do_sample": True,
-                "top_p": top_p,
-                "temperature": temperature,
-                "num_beam_groups": num_beam_groups,
-                "diversity_penalty": diversity_penalty,
-            }
-        )
-
-
-
-    generated = model.decoder.generate(**generation_kwargs)
-    sequences = generated.sequences
-
-    captions = []
-
-    for seq in sequences:
-
-        output_list = list(seq.detach().cpu().numpy())
-
-        if decoding_method is not None:
-            output = decoding_method(output_list)
-        else:
-            output = _Tokenizer.decode(output_list)
-
-        output = output.split('<|endoftext|>')[0]
-
-        if not return_start_end_tokens:
-            output = output.replace('<|startoftext|>', '')
-        else:
-            output += '<|endoftext|>'
-        captions.append(output)
-
-    if not compute_scores:
-        return captions
-
-    # Per-sequence perplexity under the model, conditioned on the CLIP prefix.
-    expanded_prefix = prefix_embeds.repeat_interleave(num_candidates, dim=0)
-    token_embeds = model.decoder.transformer.wte(sequences)
-    full_embeds = torch.cat([expanded_prefix, token_embeds], dim=1)
-
-    logits = model.decoder(inputs_embeds=full_embeds).logits[:, :-1, :]
-    log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
-    token_log_probs = log_probs.gather(dim=-1, index=sequences.unsqueeze(-1)).squeeze(-1)
-
-    seq_len = sequences.shape[1]
-    positions = torch.arange(seq_len, device=sequences.device).unsqueeze(0)
-    eos_mask = sequences.eq(eos_token_id)
-    eos_any = eos_mask.any(dim=1)
-    first_eos = torch.where(
-        eos_any,
-        eos_mask.float().argmax(dim=1),
-        torch.full((sequences.shape[0],), seq_len - 1, device=sequences.device, dtype=torch.long),
+    decoder_family = (
+        decoder_family or getattr(model, "decoder_family", None) or "gpt2"
+    ).lower()
+    effective_eos = (
+        eos_token_id
+        if eos_token_id is not None
+        else _get_default_eos_token_id(tokenizer, decoder_family)
     )
 
-    valid_mask = positions <= first_eos.unsqueeze(1)
-    lengths = valid_mask.sum(dim=1).clamp_min(1)
-    mean_neg_log_likelihood = -(token_log_probs * valid_mask).sum(dim=1) / lengths
-    perplexities = torch.exp(mean_neg_log_likelihood)
-    return captions, perplexities.detach().cpu().numpy().tolist()
+    if full_stop_token_id is None:
+        full_stop_token_id = _get_default_full_stop_token_id(tokenizer, decoder_family)
+
+    stop_tokens = set()
+    if effective_eos is not None:
+        stop_tokens.add(effective_eos)
+    if full_stop_token_id is not None:
+        stop_tokens.add(full_stop_token_id)
+
+    def _calc_lp(length: int):
+        if length_penalty == 0.0 or length <= 0:
+            return 1.0
+        return ((5.0 + length) / 6.0) ** length_penalty
+
+    # Step 0: initial forward pass with prefix embeddings
+    outputs = model.decoder(inputs_embeds=prefix_embeds)
+    logits = outputs.logits[:, -1, :].float()
+
+    if temperature > 0 and temperature != 1.0:
+        logits = logits / temperature
+
+    if prevent_eos_at_start and min_new_tokens > 0:
+        for stop_tok in stop_tokens:
+            if 0 <= stop_tok < logits.shape[-1]:
+                logits[:, stop_tok] = float('-inf')
+
+    log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
+    vocab_size = log_probs.shape[-1]
+    topk_log_probs, topk_tokens = torch.topk(log_probs, beam_size, dim=-1)  # (batch_size, beam_size)
+
+    # Beams flattened: (batch_size * beam_size)
+    beam_scores = topk_log_probs.view(batch_size * beam_size)
+    tokens = topk_tokens.view(batch_size * beam_size, 1)
+
+    expanded_prefix = prefix_embeds.repeat_interleave(beam_size, dim=0)  # (batch_size * beam_size, 1, H)
+    token_embeds = embedding_layer(tokens)  # (batch_size * beam_size, 1, H)
+    curr_embeds = torch.cat([expanded_prefix, token_embeds], dim=1)  # (batch_size * beam_size, 2, H)
+
+    completed = [[] for _ in range(batch_size)]
+    batch_done = [False] * batch_size
+
+    # Autoregressive generation loop
+    for step in range(1, entry_length):
+        if all(batch_done):
+            break
+
+        outputs = model.decoder(inputs_embeds=curr_embeds)
+        logits = outputs.logits[:, -1, :].float()
+
+        if temperature > 0 and temperature != 1.0:
+            logits = logits / temperature
+
+        if step < min_new_tokens:
+            for stop_tok in stop_tokens:
+                if 0 <= stop_tok < logits.shape[-1]:
+                    logits[:, stop_tok] = float('-inf')
+
+        # N-gram repetition penalty
+        if no_repeat_ngram_size > 0 and tokens.shape[1] >= no_repeat_ngram_size:
+            for beam_idx in range(batch_size * beam_size):
+                seq = tokens[beam_idx].tolist()
+                ngram_prefix = tuple(seq[-(no_repeat_ngram_size - 1):])
+                banned_tokens = set()
+                for idx in range(len(seq) - no_repeat_ngram_size + 1):
+                    if tuple(seq[idx : idx + no_repeat_ngram_size - 1]) == ngram_prefix:
+                        banned_tokens.add(seq[idx + no_repeat_ngram_size - 1])
+                if banned_tokens:
+                    logits[beam_idx, list(banned_tokens)] = float('-inf')
+
+        log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
+
+        next_beam_scores = []
+        next_tokens_list = []
+        next_embeds_list = []
+
+        for b in range(batch_size):
+            if batch_done[b]:
+                next_beam_scores.append(beam_scores[b * beam_size : (b + 1) * beam_size])
+                next_tokens_list.append(tokens[b * beam_size : (b + 1) * beam_size])
+                next_embeds_list.append(curr_embeds[b * beam_size : (b + 1) * beam_size])
+                continue
+
+            b_beam_scores = beam_scores[b * beam_size : (b + 1) * beam_size]  # (beam_size,)
+            b_log_probs = log_probs[b * beam_size : (b + 1) * beam_size]  # (beam_size, vocab_size)
+            cand_scores = b_beam_scores.unsqueeze(1) + b_log_probs  # (beam_size, vocab_size)
+            cand_scores_flat = cand_scores.view(-1)
+
+            num_to_pick = min(2 * beam_size, cand_scores_flat.shape[0])
+            topk_cand_scores, topk_cand_indices = torch.topk(cand_scores_flat, num_to_pick)
+
+            b_next_scores = []
+            b_next_tokens = []
+            b_prev_beam_indices = []
+
+            for score, cand_idx in zip(topk_cand_scores, topk_cand_indices):
+                beam_id = cand_idx.item() // vocab_size
+                token_id = cand_idx.item() % vocab_size
+                global_beam_id = b * beam_size + beam_id
+
+                if token_id in stop_tokens:
+                    full_seq = tokens[global_beam_id].tolist() + [token_id]
+                    lp = _calc_lp(len(full_seq))
+                    norm_score = score.item() / lp
+                    completed[b].append((norm_score, score.item(), full_seq))
+                else:
+                    b_next_scores.append(score)
+                    b_next_tokens.append(token_id)
+                    b_prev_beam_indices.append(global_beam_id)
+
+                if len(b_next_scores) == beam_size:
+                    break
+
+            if len(completed[b]) >= beam_size:
+                best_completed = max(c[0] for c in completed[b])
+                max_active = topk_cand_scores[0].item() / _calc_lp(step + 1)
+                if best_completed >= max_active:
+                    batch_done[b] = True
+
+            idx = 0
+            while len(b_next_scores) < beam_size:
+                cand_idx = topk_cand_indices[idx % num_to_pick].item()
+                b_next_scores.append(topk_cand_scores[idx % num_to_pick])
+                b_prev_beam_indices.append(b * beam_size + (cand_idx // vocab_size))
+                b_next_tokens.append(cand_idx % vocab_size)
+                idx += 1
+
+            next_beam_scores.append(torch.stack(b_next_scores))
+
+            prev_tokens = tokens[b_prev_beam_indices]
+            new_tokens_tensor = torch.tensor(
+                b_next_tokens, device=device, dtype=tokens.dtype
+            ).unsqueeze(1)
+            b_tokens = torch.cat([prev_tokens, new_tokens_tensor], dim=1)
+            next_tokens_list.append(b_tokens)
+
+            prev_embeds = curr_embeds[b_prev_beam_indices]
+            new_embeds = embedding_layer(new_tokens_tensor)
+            b_embeds = torch.cat([prev_embeds, new_embeds], dim=1)
+            next_embeds_list.append(b_embeds)
+
+        beam_scores = torch.cat(next_beam_scores, dim=0)
+        tokens = torch.cat(next_tokens_list, dim=0)
+        curr_embeds = torch.cat(next_embeds_list, dim=0)
+
+    final_captions = []
+    final_scores = []
+
+    for b in range(batch_size):
+        if completed[b]:
+            completed[b].sort(key=lambda x: x[0], reverse=True)
+            best_norm_score, best_raw_score, best_tokens = completed[b][0]
+        else:
+            b_scores = beam_scores[b * beam_size : (b + 1) * beam_size]
+            lp = _calc_lp(tokens.shape[1])
+            b_norm_scores = b_scores / lp
+            best_idx = torch.argmax(b_norm_scores).item()
+            best_tokens = tokens[b * beam_size + best_idx].tolist()
+            best_raw_score = b_scores[best_idx].item()
+
+        if decoding_method is not None:
+            output = decoding_method(best_tokens)
+        else:
+            output = _decode_token_list(tokenizer, best_tokens)
+
+        if '<|startoftext|>' in output or '<|endoftext|>' in output:
+            output = output.split('<|endoftext|>')[0]
+            if not return_start_end_tokens:
+                output = output.replace('<|startoftext|>', '')
+            else:
+                output += '<|endoftext|>'
+        for stop in ['<|im_end|>', '<|end|>', '<eos>', '</s>']:
+            if stop in output:
+                output = output.split(stop)[0]
+        if not return_start_end_tokens:
+            for start in ['<|im_start|>', '<bos>', '<s>']:
+                output = output.replace(start, '')
+        final_captions.append(output.strip())
+
+        if best_raw_score <= 0:
+            seq_prob = math.exp(best_raw_score / max(1, len(best_tokens)))
+        else:
+            seq_prob = float(best_raw_score)
+        final_scores.append(seq_prob)
+
+    return (final_captions, final_scores) if compute_scores else final_captions
+
+import copy
+
 
 @torch.no_grad()
 def _decoding_diverse_autoregressive(
@@ -727,157 +811,169 @@ def decoding_diverse_batched(
     top_p: float = 0.9,
     temperature: float = 1.0,
     prevent_eos_at_start: bool = True,
-    use_hf_generate_method: bool = True, # Added toggle
-    tokenizer=None,                      # For non-GPT2 models
+    min_new_tokens: int = 1,
+    tokenizer=None,
     decoder_family: Optional[str] = None,
-    use_old_version: bool = True,              # Toggle to switch back to old implementation
 ):
-    if use_old_version:
-        return decoding_diverse_batched_old(
-            model=model,
-            clip_features=clip_features,
-            compute_scores=compute_scores,
-            decoding_method=decoding_method,
-            return_start_end_tokens=return_start_end_tokens,
-            num_candidates=num_candidates,
-            diverse_mode=diverse_mode,
-            entry_length=entry_length,
-            num_beam_groups=num_beam_groups,
-            diversity_penalty=diversity_penalty,
-            top_p=top_p,
-            temperature=temperature,
-        )
-
     model.eval()
     device = clip_features.device
+    model_dtype = next(model.decoder.parameters()).dtype
     decoder_family = (decoder_family or getattr(model, "decoder_family", "gpt2")).lower()
-    
-    # 1. PREPARE PREFIX (Exact same as Version 1)
+
+    # 1. PREPARE PREFIX
     prefix_embeds = model.clip_project(clip_features).view(clip_features.shape[0], 1, -1)
-    bs = prefix_embeds.shape[0]
+    prefix_embeds = prefix_embeds.to(model_dtype)
+    batch_size = prefix_embeds.shape[0]
 
-    # 2. RESOLVE TOKENS (Version 1 style for GPT-2)
-    if decoder_family == "gpt2":
-        # Uses the specific _Tokenizer from your Version 1
-        eos_token_id = _Tokenizer.encoder.get("<|endoftext|>", 49407)
-    else:
-        eos_token_id = getattr(tokenizer, "eos_token_id", None)
+    # 2. RESOLVE TOKENS
+    eos_token_id = _get_default_eos_token_id(tokenizer, decoder_family)
+    bos_token_id = getattr(model.decoder.config, "bos_token_id", None)
+    full_stop_token_id = _get_default_full_stop_token_id(tokenizer, decoder_family)
 
-    # 3. BRANCHING LOGIC
-    # Use manual loop for specific architectures or if HF is disabled
-    use_manual = not use_hf_generate_method or decoder_family in ['qwen3', 'gemma3', 'llama', 'openelm']
+    ## 3. ARCHITECTURE BRANCHING (The Fix)
+    ## GPT-2 does NOT want a BOS. Gemma/Qwen/Llama DO.
+    #if decoder_family != 'gpt2' and bos_token_id is not None:
+    #    embedding_layer = model.decoder.get_input_embeddings()
+    #    bos_tokens = torch.full((batch_size, 1), bos_token_id, device=device, dtype=torch.long)
+    #    bos_embeds = embedding_layer(bos_tokens)
+    #    full_inputs_embeds = torch.cat([bos_embeds, prefix_embeds], dim=1)
+    #else:
+    #    # For GPT-2 or models without BOS
+    #    full_inputs_embeds = prefix_embeds
 
-    if use_manual:
-        # Calls the autoregressive logic provided in Impl 2
+    full_inputs_embeds = prefix_embeds
+
+    # For non-GPT2 decoder families, avoid generate(inputs_embeds=...) because it
+    # can collapse to EOS/special-token outputs. Use explicit autoregressive sampling.
+    if decoder_family in ['qwen3', 'gemma3', 'llama', 'openelm']:
         return _decoding_diverse_autoregressive(
             model=model,
-            full_inputs_embeds=prefix_embeds,
+            full_inputs_embeds=full_inputs_embeds,
             entry_length=entry_length,
             num_candidates=num_candidates,
             eos_token_id=eos_token_id,
-            full_stop_token_id=None,
+            full_stop_token_id=full_stop_token_id,
             top_p=top_p,
             temperature=temperature,
-            tokenizer=tokenizer if tokenizer else _Tokenizer,
+            tokenizer=tokenizer,
             decoding_method=decoding_method,
             return_start_end_tokens=return_start_end_tokens,
             compute_scores=compute_scores,
             prevent_eos_at_start=prevent_eos_at_start,
         )
 
-    # 4. HF GENERATE PATH (Restored to match Version 1 exactly)
-    num_beam_groups = max(1, min(num_beam_groups, num_candidates))
-    while num_candidates % num_beam_groups != 0 and num_beam_groups > 1:
-        num_beam_groups -= 1
+    # 4. ATTENTION MASK
+    attention_mask = torch.ones(batch_size, full_inputs_embeds.shape[1], device=device, dtype=torch.long)
+
+    # 5. GENERATION CONFIG
+    # Diverse Beam Search fallback logic
+    actual_beam_groups = num_beam_groups
+    if diverse_mode == "strict":
+        actual_beam_groups = max(1, min(num_beam_groups, num_candidates))
+        while num_candidates % actual_beam_groups != 0 and actual_beam_groups > 1:
+            actual_beam_groups -= 1
+    else:
+        actual_beam_groups = 1
 
     generation_kwargs = {
-        "inputs_embeds": prefix_embeds,
+        "inputs_embeds": full_inputs_embeds,
+        "attention_mask": attention_mask,
         "max_new_tokens": entry_length,
         "num_beams": num_candidates,
         "num_return_sequences": num_candidates,
         "eos_token_id": eos_token_id,
         "pad_token_id": eos_token_id,
         "return_dict_in_generate": True,
-        "output_scores": False,
-        "early_stopping": True,
-        #"custom_generate": "transformers-community/group-beam-search",
-        #"trust_remote_code": True
+        "use_cache": True,
     }
 
-    if not hasattr(model.decoder, "transformers-community/group-beam-search"):
-        global diverse_beam_func
-        setattr(type(model.decoder), "transformers-community/group-beam-search", diverse_beam_func)
+    # Prevent immediate EOS collapse, which can produce empty candidates.
+    if prevent_eos_at_start and min_new_tokens > 0:
+        generation_kwargs["min_new_tokens"] = min(min_new_tokens, entry_length)
 
-
-    if diverse_mode == "strict":
+    if diverse_mode == "strict" and actual_beam_groups > 1:
         generation_kwargs.update({
             "do_sample": False,
-            "num_beam_groups": num_beam_groups,
+            "num_beam_groups": actual_beam_groups,
             "diversity_penalty": diversity_penalty,
-            "temperature": 1.0,
         })
     else:
         generation_kwargs.update({
             "do_sample": True,
             "top_p": top_p,
             "temperature": temperature,
-            "num_beam_groups": num_beam_groups,
-            "diversity_penalty": diversity_penalty,
         })
 
-    generated = model.decoder.generate(**generation_kwargs)
+    # Deep clean config
+    if hasattr(model.decoder, "generation_config"):
+        gen_config = copy.deepcopy(model.decoder.generation_config)
+        gen_config.custom_generate = False
+        generation_kwargs["generation_config"] = gen_config
+
+    # 6. GENERATE WITH EXPLICIT ERROR HANDLING
+    try:
+        generated = model.decoder.generate(**generation_kwargs)
+    except Exception as e:
+        # If grouped beam search is not supported (common on some decoder families),
+        # fall back to multinomial sampling to retain candidate diversity.
+        if "group" in str(e).lower() or "attribute" in str(e).lower():
+            generation_kwargs.pop("num_beam_groups", None)
+            generation_kwargs.pop("diversity_penalty", None)
+            generation_kwargs["do_sample"] = True
+            generation_kwargs["num_beams"] = 1
+            generation_kwargs["top_p"] = top_p
+            generation_kwargs["temperature"] = temperature
+            generated = model.decoder.generate(**generation_kwargs)
+        else:
+            raise e
+
     sequences = generated.sequences
 
-    # 5. DECODING & CLEANING (Exact match to Version 1)
+    # 7. DECODE (Restoring GPT2/CLIP compatibility)
     captions = []
     for seq in sequences:
-        output_list = list(seq.detach().cpu().numpy())
+        output_list = seq.tolist()
         if decoding_method is not None:
             output = decoding_method(output_list)
         else:
-            # Fallback to the specific tokenizer style of Version 1
-            output = _Tokenizer.decode(output_list) if decoder_family == "gpt2" else tokenizer.decode(output_list)
-
-        output = output.split('<|endoftext|>')[0]
+            output = _decode_token_list(tokenizer, output_list)
+        
+        # Cleanup
+        for stop in ['<|endoftext|>', '<|im_end|>', '<|end|>', '<eos>', '</s>']:
+            output = output.split(stop)[0]
         if not return_start_end_tokens:
-            output = output.replace('<|startoftext|>', '')
-        else:
-            output += '<|endoftext|>'
-        captions.append(output)
+            for start in ['<|startoftext|>', '<|im_start|>', '<bos>', '<s>']:
+                output = output.replace(start, '')
+        captions.append(output.strip())
 
     if not compute_scores:
         return captions
 
-    # 6. PERPLEXITY (Exact logic from Version 1)
-    expanded_prefix = prefix_embeds.repeat_interleave(num_candidates, dim=0)
+    # 8. PERPLEXITY
+    current_prefix_len = full_inputs_embeds.shape[1]
+    expanded_prefix = full_inputs_embeds.repeat_interleave(num_candidates, dim=0)
+    token_embeds = model.decoder.get_input_embeddings()(sequences)
+    combined_embeds = torch.cat([expanded_prefix, token_embeds], dim=1)
     
-    # Use transformer.wte for GPT2 compatibility
-    if hasattr(model.decoder, "transformer"):
-        token_embeds = model.decoder.transformer.wte(sequences)
-    else:
-        token_embeds = model.decoder.get_input_embeddings()(sequences)
-        
-    full_embeds = torch.cat([expanded_prefix, token_embeds], dim=1)
-
-    logits = model.decoder(inputs_embeds=full_embeds).logits[:, :-1, :]
-    log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
+    full_mask = torch.ones(combined_embeds.shape[:2], device=device, dtype=torch.long)
+    logits = model.decoder(inputs_embeds=combined_embeds, attention_mask=full_mask).logits
+    
+    # Align: Logit at index T predicts Token at index T+1
+    shift_logits = logits[:, current_prefix_len-1:-1, :]
+    log_probs = torch.nn.functional.log_softmax(shift_logits.float(), dim=-1)
     token_log_probs = log_probs.gather(dim=-1, index=sequences.unsqueeze(-1)).squeeze(-1)
 
-    seq_len = sequences.shape[1]
-    positions = torch.arange(seq_len, device=sequences.device).unsqueeze(0)
-    eos_mask = sequences.eq(eos_token_id)
-    first_eos = torch.where(
-        eos_mask.any(dim=1),
-        eos_mask.float().argmax(dim=1),
-        torch.full((sequences.shape[0],), seq_len - 1, device=sequences.device, dtype=torch.long),
-    )
-    valid_mask = positions <= first_eos.unsqueeze(1)
+    # Valid mask (ignore padding)
+    pos = torch.arange(sequences.shape[1], device=device).unsqueeze(0)
+    eos_at = torch.where(sequences.eq(eos_token_id).any(1), sequences.eq(eos_token_id).float().argmax(1), torch.tensor(sequences.shape[1] - 1, device=device))
+    valid_mask = pos <= eos_at.unsqueeze(1)
 
-    lengths = valid_mask.sum(dim=1).clamp_min(1)
-    mean_neg_log_likelihood = -(token_log_probs * valid_mask).sum(dim=1) / lengths
-    perplexities = torch.exp(mean_neg_log_likelihood)
+    mean_nll = -(token_log_probs * valid_mask).sum(dim=1) / valid_mask.sum(dim=1).clamp(min=1)
+    perplexities = torch.exp(mean_nll).detach().cpu().numpy().tolist()
 
-    return captions, perplexities.detach().cpu().numpy().tolist()
+    return captions, perplexities
+
+
 
 decap_model = None
 
@@ -901,18 +997,19 @@ def get_decap_model(device, weights_path = DECAP_COCO_WEIGHTS_PATH, prefix_size=
     decap_model = DeCap(prefix_size, **decoder_kwargs)
     
     # Try to load with HuggingFace Hub fallback
-    try:
-        
-        state_dict = load_model_with_hf_fallback(
-            local_path=weights_path,
-            hf_repo_id=hf_repo_id,
-            map_location=torch.device('cpu')
-        )
-        decap_model.load_state_dict(state_dict, strict=False)
-    except Exception as e:
-        print(f"Warning: Failed to load with HF fallback: {e}")
-        # Fallback to original loading method
-        decap_model.load_state_dict(torch.load(weights_path, map_location=torch.device('cpu')), strict=False)
+    if weights_path is not None:
+        try:
+            
+            state_dict = load_model_with_hf_fallback(
+                local_path=weights_path,
+                hf_repo_id=hf_repo_id,
+                map_location=torch.device('cpu')
+            )
+            decap_model.load_state_dict(state_dict, strict=False)
+        except Exception as e:
+            print(f"Warning: Failed to load with HF fallback: {e}")
+            # Fallback to original loading method
+            decap_model.load_state_dict(torch.load(weights_path, map_location=torch.device('cpu')), strict=False)
     
     decap_model = decap_model.to(device)
     decap_model = decap_model.eval()
